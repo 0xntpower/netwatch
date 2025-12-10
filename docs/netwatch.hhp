@@ -1,0 +1,14 @@
+[OPTIONS]
+Compiled file=netwatch.chm
+Contents file=netwatch.hhc
+Default Topic=netwatch.html
+Display compile progress=Yes
+Full-text search=Yes
+Language=0x409
+
+[WINDOWS]
+Main="NetWatch","netwatch.html","netwatch.hhc"
+
+[FILES]
+netwatch.html
+netwatch.hhc

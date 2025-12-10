@@ -1,0 +1,369 @@
+// Microsoft Visual C++ generated resource script.
+//
+#include "resource.h"
+
+#define APSTUDIO_READONLY_SYMBOLS
+/////////////////////////////////////////////////////////////////////////////
+//
+// Generated from the TEXTINCLUDE 2 resource.
+//
+#include "atlres.h"
+
+/////////////////////////////////////////////////////////////////////////////
+#undef APSTUDIO_READONLY_SYMBOLS
+
+/////////////////////////////////////////////////////////////////////////////
+// English (U.S.) resources
+
+#if !defined(AFX_RESOURCE_DLL) || defined(AFX_TARG_ENU)
+#ifdef _WIN32
+LANGUAGE LANG_ENGLISH, SUBLANG_ENGLISH_US
+#pragma code_page(1252)
+#endif //_WIN32
+
+#ifdef APSTUDIO_INVOKED
+/////////////////////////////////////////////////////////////////////////////
+//
+// TEXTINCLUDE
+//
+
+1 TEXTINCLUDE 
+BEGIN
+    "resource.h\0"
+END
+
+2 TEXTINCLUDE 
+BEGIN
+    "#include ""atlres.h""\r\n"
+    "\0"
+END
+
+3 TEXTINCLUDE 
+BEGIN
+    "\0"
+END
+
+#endif    // APSTUDIO_INVOKED
+
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// Toolbar
+//
+
+IDR_MAINFRAME TOOLBAR  16, 15
+BEGIN
+    BUTTON      ID_FILE_REFRESH
+    BUTTON      ID_FILE_PAUSE
+    SEPARATOR
+    BUTTON      ID_PROCESS_ENDPROCESS
+    BUTTON      ID_PROCESS_CLOSECONNECTION
+    SEPARATOR
+    BUTTON      ID_APP_ABOUT
+END
+
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// Bitmap
+//
+
+IDR_MAINFRAME           BITMAP                  "res\\Toolbar.bmp"
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// Menu
+//
+
+IDR_MAINFRAME MENU
+BEGIN
+    POPUP "&File"
+    BEGIN
+        MENUITEM "&Refresh Now\tF5",            ID_FILE_REFRESH
+        MENUITEM "&Pause\tSpace",               ID_FILE_PAUSE
+        MENUITEM SEPARATOR
+        MENUITEM "E&xit",                       ID_APP_EXIT
+    END
+    POPUP "&Options"
+    BEGIN
+        MENUITEM "&Always On Top",              ID_OPTIONS_ALWAYSONTOP
+        MENUITEM "Show &Unconnected Endpoints", ID_OPTIONS_SHOWUNCONNECTED, CHECKED
+        MENUITEM SEPARATOR
+        MENUITEM "&Filter...\tCtrl+F",          ID_OPTIONS_FILTER
+    END
+    POPUP "&Process"
+    BEGIN
+        MENUITEM "&End Process...",             ID_PROCESS_ENDPROCESS
+        MENUITEM "&Close Connection",           ID_PROCESS_CLOSECONNECTION
+        MENUITEM SEPARATOR
+        MENUITEM "P&roperties...",              ID_PROCESS_PROPERTIES
+        MENUITEM "&Whois...",                   ID_PROCESS_WHOIS
+    END
+    POPUP "&View"
+    BEGIN
+        MENUITEM "&Toolbar",                    ID_VIEW_TOOLBAR
+        MENUITEM "&Status Bar",                 ID_VIEW_STATUS_BAR
+    END
+    POPUP "&Help"
+    BEGIN
+        MENUITEM "&Help Topics\tF1",            ID_APP_HELP_CONTENTS
+        MENUITEM SEPARATOR
+        MENUITEM "&About NetWatch...",          ID_APP_ABOUT
+    END
+END
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// Context Menu
+//
+
+IDR_CONTEXT_MENU MENU
+BEGIN
+    POPUP ""
+    BEGIN
+        MENUITEM "&End Process...",             ID_PROCESS_ENDPROCESS
+        MENUITEM "&Close Connection",           ID_PROCESS_CLOSECONNECTION
+        MENUITEM SEPARATOR
+        MENUITEM "Copy\tCtrl+C",                ID_EDIT_COPY
+        MENUITEM SEPARATOR
+        MENUITEM "P&roperties...",              ID_PROCESS_PROPERTIES
+        MENUITEM "&Whois...",                   ID_PROCESS_WHOIS
+    END
+END
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// Icon
+//
+
+// Icon with lowest ID value placed first to ensure application icon
+// remains consistent on all systems.
+IDR_MAINFRAME           ICON                    "res\\logo.ico"
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// Dialog
+//
+
+IDD_ABOUTBOX DIALOGEX 0, 0, 280, 130
+STYLE DS_MODALFRAME | DS_CENTER | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "About NetWatch"
+FONT 9, "Segoe UI"
+BEGIN
+    ICON            IDR_MAINFRAME,IDC_STATIC,14,14,21,20
+    LTEXT           "NetWatch",IDC_STATIC,45,14,220,14,SS_NOPREFIX
+    LTEXT           "Version 1.0.0",IDC_STATIC,45,30,220,8
+    LTEXT           "Advanced Network Connection Monitor",IDC_STATIC,45,42,220,8
+    LTEXT           "Displays active TCP/UDP connections with detailed process and security context information.",IDC_STATIC,45,56,220,16
+    LTEXT           "Developed by ntpower",IDC_STATIC,45,76,220,8
+    LTEXT           "Licensed under the MIT License",IDC_STATIC,45,88,220,8
+    LTEXT           "https://github.com/ntpower",IDC_STATIC,45,100,220,8
+    DEFPUSHBUTTON   "OK",IDOK,223,109,50,14
+END
+
+IDD_FILTER DIALOGEX 0, 0, 250, 80
+STYLE DS_MODALFRAME | DS_CENTER | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "Process Filter"
+FONT 9, "Segoe UI"
+BEGIN
+    LTEXT           "Filter by process name:",IDC_STATIC,7,7,120,8
+    LTEXT           "Enter a process name or partial name to filter connections.\nLeave blank to show all processes.",IDC_STATIC,7,20,236,16
+    EDITTEXT        IDC_FILTER_EDIT,7,40,236,14,ES_AUTOHSCROLL
+    DEFPUSHBUTTON   "OK",IDOK,139,59,50,14
+    PUSHBUTTON      "Cancel",IDCANCEL,193,59,50,14
+END
+
+IDD_PROPERTIES DIALOGEX 0, 0, 380, 340
+STYLE DS_MODALFRAME | DS_CENTER | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "Connection Properties"
+FONT 9, "Segoe UI"
+BEGIN
+    GROUPBOX        "Process Information",IDC_STATIC,7,7,366,70
+    LTEXT           "Process Name:",IDC_STATIC,14,20,60,8
+    EDITTEXT        IDC_PROP_PROCESS,80,18,286,14,ES_AUTOHSCROLL | ES_READONLY
+    LTEXT           "Process ID:",IDC_STATIC,14,37,60,8
+    EDITTEXT        IDC_PROP_PID,80,35,80,14,ES_AUTOHSCROLL | ES_READONLY
+    LTEXT           "Architecture:",IDC_STATIC,14,54,60,8
+    EDITTEXT        IDC_PROP_ARCH,80,52,80,14,ES_AUTOHSCROLL | ES_READONLY
+    LTEXT           "Integrity:",IDC_STATIC,170,54,50,8
+    EDITTEXT        IDC_PROP_INTEGRITY,225,52,141,14,ES_AUTOHSCROLL | ES_READONLY
+
+    GROUPBOX        "Connection Information",IDC_STATIC,7,82,366,80
+    LTEXT           "Protocol:",IDC_STATIC,14,95,60,8
+    EDITTEXT        IDC_PROP_PROTOCOL,80,93,80,14,ES_AUTOHSCROLL | ES_READONLY
+    LTEXT           "State:",IDC_STATIC,170,95,50,8
+    EDITTEXT        IDC_PROP_STATE,225,93,141,14,ES_AUTOHSCROLL | ES_READONLY
+    LTEXT           "Local Address:",IDC_STATIC,14,112,60,8
+    EDITTEXT        IDC_PROP_LOCAL_ADDR,80,110,80,14,ES_AUTOHSCROLL | ES_READONLY
+    LTEXT           "Local Port:",IDC_STATIC,170,112,50,8
+    EDITTEXT        IDC_PROP_LOCAL_PORT,225,110,141,14,ES_AUTOHSCROLL | ES_READONLY
+    LTEXT           "Remote Address:",IDC_STATIC,14,129,64,8
+    EDITTEXT        IDC_PROP_REMOTE_ADDR,80,127,80,14,ES_AUTOHSCROLL | ES_READONLY
+    LTEXT           "Remote Port:",IDC_STATIC,170,129,50,8
+    EDITTEXT        IDC_PROP_REMOTE_PORT,225,127,141,14,ES_AUTOHSCROLL | ES_READONLY
+    LTEXT           "Executable:",IDC_STATIC,14,146,60,8
+    EDITTEXT        IDC_PROP_EXECUTABLE,80,144,286,14,ES_AUTOHSCROLL | ES_READONLY
+
+    GROUPBOX        "Security Features",IDC_STATIC,7,167,366,130
+    LTEXT           "DEP/NX:",IDC_STATIC,14,180,60,8
+    EDITTEXT        IDC_PROP_DEP,80,178,80,14,ES_AUTOHSCROLL | ES_READONLY
+    LTEXT           "ASLR:",IDC_STATIC,170,180,50,8
+    EDITTEXT        IDC_PROP_ASLR,225,178,141,14,ES_AUTOHSCROLL | ES_READONLY
+    LTEXT           "CFG:",IDC_STATIC,14,197,60,8
+    EDITTEXT        IDC_PROP_CFG,80,195,80,14,ES_AUTOHSCROLL | ES_READONLY
+    LTEXT           "SafeSEH:",IDC_STATIC,170,197,50,8
+    EDITTEXT        IDC_PROP_SAFESEH,225,195,141,14,ES_AUTOHSCROLL | ES_READONLY
+
+    LTEXT           "This connection is owned by the process listed above. Security features indicate the protection mechanisms enabled for the executable.",IDC_STATIC,14,220,352,24
+    LTEXT           "DEP/NX prevents code execution in data regions. ASLR randomizes memory addresses. CFG validates indirect calls. SafeSEH protects exception handlers (x86 only).",IDC_STATIC,14,248,352,40
+
+    DEFPUSHBUTTON   "OK",IDOK,323,319,50,14
+END
+
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// DESIGNINFO
+//
+
+#ifdef APSTUDIO_INVOKED
+GUIDELINES DESIGNINFO 
+BEGIN
+    IDD_ABOUTBOX, DIALOG
+    BEGIN
+        LEFTMARGIN, 7
+        RIGHTMARGIN, 193
+        TOPMARGIN, 7
+        BOTTOMMARGIN, 73
+    END
+END
+#endif    // APSTUDIO_INVOKED
+
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// Accelerator
+//
+
+IDR_MAINFRAME ACCELERATORS
+BEGIN
+    VK_F5,          ID_FILE_REFRESH,        VIRTKEY
+    VK_SPACE,       ID_FILE_PAUSE,          VIRTKEY
+    "C",            ID_EDIT_COPY,           VIRTKEY, CONTROL
+    "F",            ID_OPTIONS_FILTER,      VIRTKEY, CONTROL
+    VK_DELETE,      ID_PROCESS_ENDPROCESS,  VIRTKEY
+    VK_F1,          ID_APP_HELP_CONTENTS,   VIRTKEY
+END
+
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// Version
+//
+
+VS_VERSION_INFO VERSIONINFO
+ FILEVERSION 1,0,0,1
+ PRODUCTVERSION 1,0,0,1
+ FILEFLAGSMASK 0x3fL
+#ifdef _DEBUG
+ FILEFLAGS 0x1L
+#else
+ FILEFLAGS 0x0L
+#endif
+ FILEOS 0x4L
+ FILETYPE 0x1L
+ FILESUBTYPE 0x0L
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904B0"
+        BEGIN
+            VALUE "CompanyName", "ntpower\0"
+            VALUE "FileDescription", "NetWatch - Advanced Network Connection Monitor\0"
+            VALUE "FileVersion", "1.0.0.1\0"
+            VALUE "InternalName", "netwatch\0"
+            VALUE "LegalCopyright", "Copyright 2025 ntpower - MIT License\0"
+            VALUE "OriginalFilename", "netwatch.exe\0"
+            VALUE "ProductName", "NetWatch\0"
+            VALUE "ProductVersion", "1.0.0.1\0"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x0409, 0x04B0
+    END
+END
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// String Table
+//
+
+STRINGTABLE 
+BEGIN
+    IDR_MAINFRAME           "netwatch"
+END
+
+STRINGTABLE
+BEGIN
+    ID_FILE_REFRESH         "Refresh the connection list now\nRefresh"
+    ID_FILE_PAUSE           "Pause or resume automatic updates\nPause"
+END
+
+STRINGTABLE 
+BEGIN
+    ID_APP_ABOUT            "Display program information\nAbout"
+    ID_APP_EXIT             "Quit the application\nExit"
+END
+
+STRINGTABLE 
+BEGIN
+    ID_OPTIONS_ALWAYSONTOP      "Keep window on top of other windows"
+    ID_OPTIONS_RESOLVEADDRESSES "Resolve IP addresses to host names"
+    ID_OPTIONS_SHOWUNCONNECTED  "Show unconnected endpoints"
+    ID_OPTIONS_HIGHLIGHTNEW     "Highlight new and changed connections"
+END
+
+STRINGTABLE 
+BEGIN
+    ID_PROCESS_ENDPROCESS       "Terminate the selected process\nEnd Process"
+    ID_PROCESS_CLOSECONNECTION  "Close the selected TCP connection\nClose Connection"
+    ID_PROCESS_PROPERTIES       "View properties of the selected process"
+    ID_PROCESS_WHOIS            "Perform WHOIS lookup on remote address"
+END
+
+STRINGTABLE 
+BEGIN
+    ID_VIEW_TOOLBAR         "Show or hide the toolbar\nToggle ToolBar"
+    ID_VIEW_STATUS_BAR      "Show or hide the status bar\nToggle StatusBar"
+END
+
+STRINGTABLE 
+BEGIN
+    ATL_IDS_SCSIZE          "Change the window size"
+    ATL_IDS_SCMOVE          "Change the window position"
+    ATL_IDS_SCMINIMIZE      "Reduce the window to an icon"
+    ATL_IDS_SCMAXIMIZE      "Enlarge the window to full size"
+    ATL_IDS_SCNEXTWINDOW    "Switch to the next document window"
+    ATL_IDS_SCPREVWINDOW    "Switch to the previous document window"
+    ATL_IDS_SCCLOSE         "Close the active window"
+END
+
+STRINGTABLE 
+BEGIN
+    ATL_IDS_SCRESTORE       "Restore the window to normal size"
+    ATL_IDS_SCTASKLIST      "Activate Task List"
+    ATL_IDS_MDICHILD        "Activate this window"
+END
+
+STRINGTABLE 
+BEGIN
+    ATL_IDS_IDLEMESSAGE     "Ready"
+END
+
+#endif    // English (U.S.) resources
+/////////////////////////////////////////////////////////////////////////////
+
+
+#ifndef APSTUDIO_INVOKED
+#endif    // not APSTUDIO_INVOKED
