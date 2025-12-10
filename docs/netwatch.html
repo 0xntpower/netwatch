@@ -1,0 +1,255 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.0 Transitional//EN">
+<HTML><HEAD><TITLE>NetWatch Help</TITLE>
+<META content="text/html; charset=windows-1252" http-equiv=Content-Type>
+<STYLE>
+        body {
+            font-family: Segoe UI, Tahoma, sans-serif;
+            margin: 20px;
+            background-color: #ffffff;
+        }
+        h1 {
+            color: #0078d4;
+            border-bottom: 2px solid #0078d4;
+            padding-bottom: 5px;
+        }
+        h2 {
+            color: #2b579a;
+            margin-top: 20px;
+        }
+        h3 {
+            color: #505050;
+            margin-top: 15px;
+        }
+        p {
+            line-height: 1.6;
+        }
+        ul {
+            line-height: 1.8;
+        }
+        code {
+            background-color: #f0f0f0;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: Consolas, monospace;
+        }
+        .note {
+            background-color: #e7f3ff;
+            border-left: 4px solid #0078d4;
+            padding: 10px 15px;
+            margin: 15px 0;
+        }
+        .warning {
+            background-color: #fff4ce;
+            border-left: 4px solid #ffb900;
+            padding: 10px 15px;
+            margin: 15px 0;
+        }
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            margin: 15px 0;
+        }
+        th, td {
+            border: 1px solid #d0d0d0;
+            padding: 8px 12px;
+            text-align: left;
+        }
+        th {
+            background-color: #f5f5f5;
+            font-weight: 600;
+        }
+    </STYLE>
+
+<META name=GENERATOR content="MSHTML 11.00.10570.1001"></HEAD>
+<BODY>
+<H1>NetWatch Network Connection Monitor</H1>
+<H2>Overview</H2>
+<P>NetWatch is a network connection monitoring tool for Windows that displays 
+active TCP and UDP connections with detailed process and security context 
+information. It provides real-time monitoring of network endpoints with a focus 
+on security-relevant metadata.</P>
+<DIV class=note><STRONG>Note:</STRONG> NetWatch requires administrative 
+privileges to display connection statistics and integrity levels. </DIV>
+<H2>Getting Started</H2>
+<H3>System Requirements</H3>
+<UL>
+  <LI>Windows 10 or later (x64) 
+  <LI>Administrator privileges (recommended for full functionality) </LI></UL>
+<H3>Launching NetWatch</H3>
+<P>NetWatch can be launched from the command line or by double-clicking the 
+executable.</P>
+<P><STRONG>Command-line syntax:</STRONG></P><CODE>netwatch.exe [options]</CODE> 
+<P><STRONG>Options:</STRONG></P>
+<UL>
+  <LI><CODE>--filter &lt;name&gt;</CODE> or <CODE>-f &lt;name&gt;</CODE> - 
+  Filter connections by process name 
+  <LI><CODE>--help</CODE> or <CODE>-h</CODE> or <CODE>/?</CODE> - Display help 
+  information </LI></UL>
+<P><STRONG>Examples:</STRONG></P><CODE>netwatch.exe --filter 
+chrome</CODE><BR><CODE>netwatch.exe -f svchost</CODE> 
+<H2>User Interface</H2>
+<H3>Main Window</H3>
+<P>The main window displays a list of active network connections with the 
+following columns:</P>
+<TABLE>
+  <TBODY>
+  <TR>
+    <TH>Column</TH>
+    <TH>Description</TH></TR>
+  <TR>
+    <TD>Process Name</TD>
+    <TD>Name of the process that owns the connection</TD></TR>
+  <TR>
+    <TD>PID</TD>
+    <TD>Process identifier</TD></TR>
+  <TR>
+    <TD>Protocol</TD>
+    <TD>Network protocol (TCP, TCPv6, UDP, UDPv6)</TD></TR>
+  <TR>
+    <TD>Integrity</TD>
+    <TD>Process integrity level (System, High, Medium, Low)</TD></TR>
+  <TR>
+    <TD>Local Address</TD>
+    <TD>Local IP address</TD></TR>
+  <TR>
+    <TD>Local Port</TD>
+    <TD>Local port number</TD></TR>
+  <TR>
+    <TD>Remote Address</TD>
+    <TD>Remote IP address</TD></TR>
+  <TR>
+    <TD>Remote Port</TD>
+    <TD>Remote port number</TD></TR>
+  <TR>
+    <TD>State</TD>
+    <TD>Connection state (LISTENING, ESTABLISHED, etc.)</TD></TR>
+  <TR>
+    <TD>Arch</TD>
+    <TD>Process Architecture</TD></TR>
+  <TR>
+    <TD>DEP/NX</TD>
+    <TD>State of Data Execution Prevention Mitigation</TD></TR>
+  <TR>
+    <TD>ASLR</TD>
+    <TD>State of Address Space Layout Randomization Mitigation</TD></TR>
+  <TR>
+    <TD>Executable Path</TD>
+    <TD>Absolute path to the process's image</TD></TR>
+  <TR>
+    <TD>CFG</TD>
+    <TD>State of Control Flow Guard Mitigation</TD></TR>
+  <TR>
+    <TD>
+      <P>SafeSEH</P></TD>
+    <TD>State of Safe SEH Mitigation</TD></TR></TBODY></TABLE>
+<H3>Toolbar</H3>
+<P>The toolbar provides quick access to common functions:</P>
+<UL>
+  <LI><STRONG>Refresh</STRONG> - Manually refresh the connection list 
+  <LI><STRONG>Pause</STRONG> - Pause automatic refreshing 
+  <LI><STRONG>End Process</STRONG> - Terminate the selected process 
+  <LI><STRONG>Close Connection</STRONG> - Close the selected TCP connection 
+  <LI><STRONG>About</STRONG> - Display program information </LI></UL>
+<H2>Menu Reference</H2>
+<H3>File Menu</H3>
+<UL>
+  <LI><STRONG>Refresh Now</STRONG>&nbsp;(F5) - Manually refresh the connection 
+  list 
+  <LI><STRONG>Pause</STRONG> (Space) - Pause or resume automatic refreshing 
+  <LI><STRONG>Exit</STRONG> - Close NetWatch </LI></UL>
+<H3>Options Menu</H3>
+<UL>
+  <LI><STRONG>Always On Top</STRONG> - Keep the NetWatch window on top of other 
+  windows 
+  <LI><STRONG>Show Unconnected Endpoints</STRONG> - Display listening sockets 
+  and unconnected UDP endpoints 
+  <LI><STRONG>Filter...</STRONG> (Ctrl+F) - Set a process name filter </LI></UL>
+<H3>Process Menu</H3>
+<UL>
+  <LI><STRONG>End Process...</STRONG> (Delete) - Terminate the selected process 
+  <LI><STRONG>Close Connection</STRONG> - Close the selected TCP connection 
+  <LI><STRONG>Properties</STRONG> - View detailed properties of the selected 
+  connection 
+  <LI><STRONG>Whois</STRONG> - Perform a Whois lookup on the remote IP address 
+  </LI></UL>
+<DIV class=warning><STRONG>Warning:</STRONG> Terminating processes or closing 
+connections may cause applications to stop working or lose unsaved data. Use 
+these features with caution. </DIV>
+<H3>View Menu</H3>
+<UL>
+  <LI><STRONG>Toolbar</STRONG> - Show or hide the toolbar 
+  <LI><STRONG>Status Bar</STRONG> - Show or hide the status bar </LI></UL>
+<H3>Help Menu</H3>
+<UL>
+  <LI><STRONG>Help</STRONG> (F1) - Display this help file 
+  <LI><STRONG>About NetWatch</STRONG> - Display version and copyright 
+  information </LI></UL>
+<H2>Keyboard Shortcuts</H2>
+<TABLE>
+  <TBODY>
+  <TR>
+    <TH>Key</TH>
+    <TH>Action</TH></TR>
+  <TR>
+    <TD>F5</TD>
+    <TD>Refresh connection list</TD></TR>
+  <TR>
+    <TD>Space</TD>
+    <TD>Pause/Resume automatic refreshing</TD></TR>
+  <TR>
+    <TD></TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>Ctrl+C</TD>
+    <TD>Copy selected connection</TD></TR>
+  <TR>
+    <TD>Ctrl+F</TD>
+    <TD>Set process filter</TD></TR>
+  <TR>
+    <TD>Delete</TD>
+    <TD>End selected process</TD></TR>
+  <TR>
+    <TD>F1</TD>
+    <TD>Display help</TD></TR></TBODY></TABLE>
+<H2>Filtering Connections</H2>
+<P>You can filter the displayed connections by process name using one of these 
+methods:</P>
+<UL>
+  <LI>Launch NetWatch with the <CODE>--filter</CODE> or <CODE>-f</CODE> 
+  command-line option 
+  <LI>Select <STRONG>Options → Filter...</STRONG> from the menu (or press 
+  Ctrl+F) </LI></UL>
+<P>The filter performs a case-insensitive substring match on process names. 
+Leave the filter blank to show all processes.</P>
+<H2>Understanding Integrity Levels</H2>
+<P>Windows uses integrity levels as part of its security model. NetWatch 
+displays the integrity level of each process:</P>
+<UL>
+  <LI><STRONG>System</STRONG> - System-level processes (highest privilege) 
+  <LI><STRONG>High</STRONG> - Elevated/administrator processes 
+  <LI><STRONG>Medium</STRONG> - Standard user processes 
+  <LI><STRONG>Low</STRONG> - Sandboxed or restricted processes </LI></UL>
+<DIV class=note><STRONG>Note:</STRONG> Integrity levels are only available when 
+NetWatch is run with administrative privileges. </DIV>
+<H2>Connection States</H2>
+<P>TCP connections can be in various states:</P>
+<UL>
+  <LI><STRONG>LISTENING</STRONG> - Waiting for incoming connections 
+  <LI><STRONG>ESTABLISHED</STRONG> - Active connection 
+  <LI><STRONG>CLOSE_WAIT</STRONG> - Waiting for connection termination 
+  <LI><STRONG>TIME_WAIT</STRONG> - Waiting after connection close 
+  <LI><STRONG>SYN_SENT</STRONG> - Connection attempt in progress 
+  <LI><STRONG>SYN_RECEIVED</STRONG> - Connection request received 
+  <LI><STRONG>FIN_WAIT_1</STRONG> - Connection terminating 
+  <LI><STRONG>FIN_WAIT_2</STRONG> - Connection terminating 
+  <LI><STRONG>CLOSING</STRONG> - Connection terminating 
+  <LI><STRONG>LAST_ACK</STRONG> - Final acknowledgment </LI></UL>
+<P>UDP is a connectionless protocol and does not have connection states.</P>
+<H2>Privacy and Security</H2>
+<P>NetWatch reads network connection information from the Windows operating 
+system. It does not send any data over the network or store any data outside of 
+your computer.</P>
+<H2>Copyright and License</H2>
+<P>Copyright © 2025. All rights reserved.</P>
+<P>This software is provided "as is" without warranty of any 
+kind.</P></BODY></HTML>
