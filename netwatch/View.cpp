@@ -200,6 +200,9 @@ LRESULT CConnectionListView::OnRefreshComplete(UINT /*uMsg*/, WPARAM /*wParam*/,
 
     refreshInProgress_ = false;
 
+    // Notify parent window (MainFrame) to update status bar
+    ::PostMessage(::GetParent(m_hWnd), WM_REFRESH_COMPLETE, 0, 0);
+
     return 0;
 }
 
