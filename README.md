@@ -10,7 +10,7 @@
 
 NetWatch is a single-binary Windows tool that lists listening and established TCP/UDP connections alongside security-relevant process metadata. 
 
-Built as a lightweight alternative to TCPView for the enumeration phase of vulnerability research. Instead of network traffic metrics, NetWatch surfaces what actually matters when identifying targets: process architecture, integrity level, DEP/ASLR status, and executable paths — everything you need before loading a binary into IDA.
+Built as a lightweight alternative to TCPView for the enumeration phase of vulnerability research. Instead of network traffic metrics, NetWatch surfaces what actually matters when identifying targets: `process architecture`, `integrity level`, `DEP/ASLR/CFG status`, `SafeSEH` and `executable paths` — everything you need before loading a binary into IDA.
 
 ## Quick Start
 ```cmd
