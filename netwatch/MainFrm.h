@@ -1,13 +1,7 @@
-// MainFrm.h : interface of the CMainFrame class
-//
-// Main frame window for netwatch - a TCPView-like network monitoring tool
-/////////////////////////////////////////////////////////////////////////////
-
 #pragma once
 
 #include <string>
 
-// Custom message for refresh completion notification
 #define WM_REFRESH_COMPLETE (WM_USER + 100)
 
 class CMainFrame : 
@@ -24,18 +18,16 @@ public:
     WTL::CTrackBarCtrl m_updateFreqSlider;
     WTL::CStatic m_updateFreqLabel;
 
-    // Options state
     bool m_bAlwaysOnTop = false;
     bool m_bShowUnconnected = true;
     bool m_bPaused = false;
 
-    // Update frequency (in milliseconds)
-    int m_nUpdateInterval = 2000;  // Default to 2 seconds
+    static constexpr int kDefaultUpdateIntervalMs = 2000;
+    static constexpr int kStatusBarControlHeight = 18;
 
-    // Filter state
+    int m_nUpdateInterval = kDefaultUpdateIntervalMs;
     std::string m_processFilter;
 
-    // Set process filter (can be called before CreateEx)
     void SetProcessFilter(const std::string& filter) { m_processFilter = filter; }
 
     virtual BOOL PreTranslateMessage(MSG* pMsg);

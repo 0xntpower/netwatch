@@ -1,6 +1,3 @@
-// netwatch.cpp : main source file for netwatch.exe
-//
-
 #include "stdafx.h"
 
 #include "resource.h"
@@ -9,6 +6,7 @@
 #include "aboutdlg.h"
 #include "MainFrm.h"
 #include "util/CommandLineParser.h"
+#include "util/Error.h"
 
 WTL::CAppModule _Module;
 
@@ -48,18 +46,35 @@ int Run(LPTSTR lpstrCmdLine = nullptr, int nCmdShow = SW_SHOWDEFAULT)
 
 int WINAPI _tWinMain(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, LPTSTR lpstrCmdLine, int nCmdShow)
 {
-	HRESULT hRes = ::CoInitialize(nullptr);
-	ATLASSERT(SUCCEEDED(hRes));
+	try {
+		HRESULT hRes = ::CoInitialize(nullptr);
+		ATLASSERT(SUCCEEDED(hRes));
 
-	WTL::AtlInitCommonControls(ICC_COOL_CLASSES | ICC_BAR_CLASSES);	// add flags to support other controls
+		WTL::AtlInitCommonControls(ICC_COOL_CLASSES | ICC_BAR_CLASSES);	// add flags to support other controls
 
-	hRes = _Module.Init(nullptr, hInstance);
-	ATLASSERT(SUCCEEDED(hRes));
+		hRes = _Module.Init(nullptr, hInstance);
+		ATLASSERT(SUCCEEDED(hRes));
 
-	int nRet = Run(lpstrCmdLine, nCmdShow);
+		int nRet = Run(lpstrCmdLine, nCmdShow);
 
-	_Module.Term();
-	::CoUninitialize();
+		_Module.Term();
+		::CoUninitialize();
 
-	return nRet;
+		return nRet;
+	}
+	catch (const netwatch::util::AppError& e) {
+		netwatch::util::LogError(e.what(), e.code);
+		::MessageBoxA(nullptr, e.what(), "Application Error", MB_ICONERROR | MB_OK);
+		return netwatch::util::HResultFromErrorCode(e.code);
+	}
+	catch (const std::exception& e) {
+		netwatch::util::LogError("Unexpected error", e);
+		::MessageBoxA(nullptr, e.what(), "Unexpected Error", MB_ICONERROR | MB_OK);
+		return E_FAIL;
+	}
+	catch (...) {
+		netwatch::util::LogError("Unknown fatal error");
+		::MessageBoxA(nullptr, "An unknown fatal error occurred", "Fatal Error", MB_ICONERROR | MB_OK);
+		return E_UNEXPECTED;
+	}
 }

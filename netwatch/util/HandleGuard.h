@@ -11,7 +11,6 @@
 
 namespace netwatch::util {
 
-// RAII wrapper for Windows HANDLE resources
 class HandleGuard {
 public:
     explicit HandleGuard(HANDLE h = nullptr) noexcept;

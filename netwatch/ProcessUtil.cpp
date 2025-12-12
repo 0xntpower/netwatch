@@ -1,6 +1,8 @@
 #include "stdafx.h"
 #include "ProcessUtil.hpp"
 #include "util/WindowsError.h"
+#include "util/HandleGuard.h"
+#include "util/Error.h"
 #include <psapi.h>
 #include <winternl.h>
 
@@ -9,16 +11,12 @@
 namespace netwatch::util {
 
     BOOL TerminateTargetProcess(DWORD dwProcessId) {
-        HANDLE hProcess = OpenProcess(PROCESS_TERMINATE | PROCESS_QUERY_INFORMATION, FALSE, dwProcessId);
-        if (!hProcess) {
-            return false;
+        HandleGuard hProcess(OpenProcess(PROCESS_TERMINATE | PROCESS_QUERY_INFORMATION, FALSE, dwProcessId));
+        if (!hProcess.Valid()) {
+            return FALSE;
         }
 
-        BOOL result = TerminateProcess(hProcess, 1);
-
-        CloseHandle(hProcess);
-
-        return result;
+        return TerminateProcess(hProcess.Get(), 1);
     }
 
     bool CloseNetworkConnection(DWORD dwLocalAddr, DWORD dwLocalPort, DWORD dwRemoteAddr, DWORD dwRemotePort, std::string& errorMessage) {
@@ -47,31 +45,26 @@ namespace netwatch::util {
         info.cfgStatus = "N/A";
         info.safeSehStatus = "N/A";
 
-        // Handle special cases
         if (dwProcessId == 0 || dwProcessId == 4) {
             info.executablePath = (dwProcessId == 0) ? "System Idle Process" : "System";
             return info;
         }
 
-        // Open process with required permissions
-        HANDLE hProcess = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, dwProcessId);
-        if (!hProcess) {
+        HandleGuard hProcess(OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, dwProcessId));
+        if (!hProcess.Valid()) {
             return info;
         }
 
-        // Get executable path
         WCHAR exePath[MAX_PATH] = { 0 };
         DWORD pathLen = MAX_PATH;
-        if (QueryFullProcessImageNameW(hProcess, 0, exePath, &pathLen)) {
-            // Convert wide string to narrow string
+        if (QueryFullProcessImageNameW(hProcess.Get(), 0, exePath, &pathLen)) {
             char narrowPath[MAX_PATH];
             WideCharToMultiByte(CP_UTF8, 0, exePath, -1, narrowPath, MAX_PATH, NULL, NULL);
             info.executablePath = narrowPath;
         }
 
-        // Determine architecture
         BOOL isWow64 = FALSE;
-        if (IsWow64Process(hProcess, &isWow64)) {
+        if (IsWow64Process(hProcess.Get(), &isWow64)) {
             if (isWow64) {
                 info.architecture = "x86";
             }
@@ -87,10 +80,9 @@ namespace netwatch::util {
             }
         }
 
-        // Check DEP status
         DWORD depFlags = 0;
         BOOL depPermanent = FALSE;
-        if (GetProcessDEPPolicy(hProcess, &depFlags, &depPermanent)) {
+        if (GetProcessDEPPolicy(hProcess.Get(), &depFlags, &depPermanent)) {
             if (depFlags & PROCESS_DEP_ENABLE) {
                 info.depStatus = "Enabled";
             }
@@ -99,13 +91,12 @@ namespace netwatch::util {
             }
         }
 
-        // Read PE headers to check ASLR, SafeSEH, and CFG
         if (info.executablePath != "N/A") {
-            HANDLE hFile = CreateFileW(exePath, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
-            if (hFile != INVALID_HANDLE_VALUE) {
-                HANDLE hMapping = CreateFileMappingW(hFile, NULL, PAGE_READONLY, 0, 0, NULL);
-                if (hMapping) {
-                    LPVOID lpBase = MapViewOfFile(hMapping, FILE_MAP_READ, 0, 0, 0);
+            HandleGuard hFile(CreateFileW(exePath, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL));
+            if (hFile.Valid() && hFile.Get() != INVALID_HANDLE_VALUE) {
+                HandleGuard hMapping(CreateFileMappingW(hFile.Get(), NULL, PAGE_READONLY, 0, 0, NULL));
+                if (hMapping.Valid()) {
+                    LPVOID lpBase = MapViewOfFile(hMapping.Get(), FILE_MAP_READ, 0, 0, 0);
                     if (lpBase) {
                         PIMAGE_DOS_HEADER dosHeader = (PIMAGE_DOS_HEADER)lpBase;
                         if (dosHeader->e_magic == IMAGE_DOS_SIGNATURE) {
@@ -113,7 +104,6 @@ namespace netwatch::util {
                             if (ntHeaders->Signature == IMAGE_NT_SIGNATURE) {
                                 WORD dllCharacteristics = ntHeaders->OptionalHeader.DllCharacteristics;
 
-                                // Check ASLR (Dynamic Base)
                                 if (dllCharacteristics & IMAGE_DLLCHARACTERISTICS_DYNAMIC_BASE) {
                                     info.aslrStatus = "Enabled";
                                 }
@@ -121,7 +111,6 @@ namespace netwatch::util {
                                     info.aslrStatus = "Disabled";
                                 }
 
-                                // Check CFG (Control Flow Guard)
                                 if (dllCharacteristics & IMAGE_DLLCHARACTERISTICS_GUARD_CF) {
                                     info.cfgStatus = "Enabled";
                                 }
@@ -129,15 +118,12 @@ namespace netwatch::util {
                                     info.cfgStatus = "Disabled";
                                 }
 
-                                // Check SafeSEH (only for x86 binaries)
                                 if (ntHeaders->FileHeader.Machine == IMAGE_FILE_MACHINE_I386) {
-                                    // SafeSEH is indicated by the presence of the Load Config Directory
-                                    // and the SE Handler Table
                                     DWORD loadConfigRVA = ntHeaders->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_LOAD_CONFIG].VirtualAddress;
                                     DWORD loadConfigSize = ntHeaders->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_LOAD_CONFIG].Size;
 
                                     if (loadConfigRVA != 0 && loadConfigSize != 0) {
-                                        // Convert RVA to file offset
+                                        // RVA to file offset conversion
                                         PIMAGE_SECTION_HEADER section = IMAGE_FIRST_SECTION(ntHeaders);
                                         DWORD fileOffset = 0;
                                         for (int i = 0; i < ntHeaders->FileHeader.NumberOfSections; i++) {
@@ -166,20 +152,16 @@ namespace netwatch::util {
                                     }
                                 }
                                 else {
-                                    // SafeSEH is only applicable to x86 binaries
                                     info.safeSehStatus = "N/A";
                                 }
                             }
                         }
                         UnmapViewOfFile(lpBase);
                     }
-                    CloseHandle(hMapping);
                 }
-                CloseHandle(hFile);
             }
         }
 
-        CloseHandle(hProcess);
         return info;
     }
 

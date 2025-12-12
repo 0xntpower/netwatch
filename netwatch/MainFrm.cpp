@@ -38,7 +38,7 @@ LRESULT CMainFrame::OnCreate(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM /*lParam*/
 
     HWND hWndToolBar = CreateSimpleToolBarCtrl(m_hWnd, IDR_MAINFRAME, FALSE, ATL_SIMPLE_TOOLBAR_PANE_STYLE);
 
-    CreateSimpleReBar(ATL_SIMPLE_REBAR_NOBORDER_STYLE);
+    CreateSimpleReBar(ATL_SIMPLE_REBAR_NOBORDER_STYLE | RBS_FIXEDORDER);
     AddSimpleReBarBand(hWndCmdBar);
     AddSimpleReBarBand(hWndToolBar, nullptr, TRUE);
 
@@ -70,7 +70,7 @@ LRESULT CMainFrame::OnCreate(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM /*lParam*/
     int sliderWidth = 150;
     int labelWidth = 95;
     int rightMargin = 10;
-    int controlHeight = 18;
+    int controlHeight = kStatusBarControlHeight;
     int topMargin = 3;
 
     int sliderRight = rcStatusBar.right - rightMargin;
@@ -536,20 +536,17 @@ LRESULT CMainFrame::OnHScroll(UINT /*uMsg*/, WPARAM wParam, LPARAM lParam, BOOL&
         {
             int nPos = m_updateFreqSlider.GetPos();
 
-            // Convert slider position to milliseconds
-            // Slider range is 5-100, representing 0.5s to 10s
-            // Use a non-linear scale for better control
+            // Non-linear scale: 5-100 -> 0.5s-10s
             if (nPos <= 10) {
-                m_nUpdateInterval = nPos * 100;  // 0.5s - 1s (500ms - 1000ms)
+                m_nUpdateInterval = nPos * 100;
             } else if (nPos <= 30) {
-                m_nUpdateInterval = 1000 + (nPos - 10) * 100;  // 1s - 3s
+                m_nUpdateInterval = 1000 + (nPos - 10) * 100;
             } else if (nPos <= 50) {
-                m_nUpdateInterval = 3000 + (nPos - 30) * 100;  // 3s - 5s
+                m_nUpdateInterval = 3000 + (nPos - 30) * 100;
             } else {
-                m_nUpdateInterval = 5000 + (nPos - 50) * 100;  // 5s - 10s
+                m_nUpdateInterval = 5000 + (nPos - 50) * 100;
             }
 
-            // Update the label with better formatting
             TCHAR szLabel[64];
             if (m_nUpdateInterval < 1000) {
                 _stprintf_s(szLabel, _T("Refresh: %.1fs"), m_nUpdateInterval / 1000.0f);
@@ -563,12 +560,9 @@ LRESULT CMainFrame::OnHScroll(UINT /*uMsg*/, WPARAM wParam, LPARAM lParam, BOOL&
                 }
             }
             m_updateFreqLabel.SetWindowText(szLabel);
-
-            // Force label to redraw immediately
             m_updateFreqLabel.Invalidate();
             m_updateFreqLabel.UpdateWindow();
 
-            // Reset the timer with new interval (only on TB_ENDTRACK to avoid too frequent resets)
             if (scrollCode == TB_ENDTRACK) {
                 KillTimer(IDT_REFRESH_TIMER);
                 SetTimer(IDT_REFRESH_TIMER, m_nUpdateInterval, nullptr);
@@ -581,29 +575,24 @@ LRESULT CMainFrame::OnHScroll(UINT /*uMsg*/, WPARAM wParam, LPARAM lParam, BOOL&
 
 LRESULT CMainFrame::OnSize(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM /*lParam*/, BOOL& bHandled)
 {
-    // Let the base class handle the resize first
     bHandled = FALSE;
 
-    // Reposition slider and label if they exist
     if (m_updateFreqSlider.IsWindow() && m_updateFreqLabel.IsWindow())
     {
         RECT rcStatusBar;
         ::GetClientRect(m_hWndStatusBar, &rcStatusBar);
 
-        // Position controls from the right edge
         int sliderWidth = 150;
         int labelWidth = 95;
         int rightMargin = 10;
-        int controlHeight = 18;
+        int controlHeight = kStatusBarControlHeight;
         int topMargin = 3;
 
-        // Calculate positions from right edge
         int sliderRight = rcStatusBar.right - rightMargin;
         int sliderLeft = sliderRight - sliderWidth;
         int labelRight = sliderLeft - 5;
         int labelLeft = labelRight - labelWidth;
 
-        // Reposition label and slider in the status bar
         m_updateFreqLabel.SetWindowPos(nullptr, labelLeft, topMargin, labelWidth, controlHeight, SWP_NOZORDER);
         m_updateFreqSlider.SetWindowPos(nullptr, sliderLeft, topMargin, sliderWidth, controlHeight, SWP_NOZORDER);
     }

@@ -148,7 +148,7 @@
       <PrecompiledHeader>Use</PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
-      <ExceptionHandling />
+      <ExceptionHandling>Sync</ExceptionHandling>
       <DebugInformationFormat />
       <PreprocessorDefinitions>WIN32;_WINDOWS;STRICT;NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <LanguageStandard>stdcpp20</LanguageStandard>
@@ -179,7 +179,7 @@
       <PrecompiledHeader>Use</PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
-      <ExceptionHandling />
+      <ExceptionHandling>Sync</ExceptionHandling>
       <DebugInformationFormat />
       <PreprocessorDefinitions>_WINDOWS;STRICT;NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <LanguageStandard>stdcpp20</LanguageStandard>
@@ -244,6 +244,7 @@
     <ClInclude Include="system\ProcessInfo.h" />
     <ClInclude Include="util\AddressFormatter.h" />
     <ClInclude Include="util\CommandLineParser.h" />
+    <ClInclude Include="util\Error.h" />
     <ClInclude Include="util\HandleGuard.h" />
     <ClInclude Include="util\MessageBox.h" />
     <ClInclude Include="util\StringConversion.h" />

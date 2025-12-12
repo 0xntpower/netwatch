@@ -1,14 +1,10 @@
-// View.cpp : implementation of the CConnectionListView class
-//
-// This view displays network connections in a ListView
-/////////////////////////////////////////////////////////////////////////////
-
 #include "stdafx.h"
 #include "resource.h"
 #include "View.h"
 #include "net/TcpEnumerator.h"
 #include "net/UdpEnumerator.h"
 #include "util/StringConversion.h"
+#include "util/Error.h"
 
 #include <algorithm>
 #include <iterator>
@@ -109,9 +105,19 @@ void CConnectionListView::RefreshConnections() {
         nullptr,
         0,
         [](void* pParam) -> unsigned int {
-            CConnectionListView* pThis = static_cast<CConnectionListView*>(pParam);
-            pThis->EnumerateInBackground();
-            return 0;
+            try {
+                CConnectionListView* pThis = static_cast<CConnectionListView*>(pParam);
+                pThis->EnumerateInBackground();
+                return 0;
+            }
+            catch (const std::exception& e) {
+                netwatch::util::LogError("Background enumeration thread failed", e);
+                return ERROR_INTERNAL_ERROR;
+            }
+            catch (...) {
+                netwatch::util::LogError("Unknown exception in background enumeration thread");
+                return ERROR_INTERNAL_ERROR;
+            }
         },
         this,
         0,
@@ -346,25 +352,13 @@ void CConnectionListView::AddEntry(const netwatch::util::EndpointEntry& entry) {
 }
 
 std::string CConnectionListView::FormatNumber(uint64_t value) {
-    if (value == 0) return "0";
-
-    // Format with thousands separators
-    std::string result = std::to_string(value);
-    int insertPosition = static_cast<int>(result.length()) - 3;
-    while (insertPosition > 0) {
-        result.insert(insertPosition, ",");
-        insertPosition -= 3;
-    }
-    return result;
+    return std::format("{:L}", value);
 }
 
 LRESULT CConnectionListView::OnContextMenu(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM lParam, BOOL& /*bHandled*/)
 {
-    // Get the context menu position
     POINT pt = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
 
-    // Check if the right-click was on the header control
-    // If so, don't show the process context menu (header has its own menu)
     if (pt.x != -1 && pt.y != -1)
     {
         HWND hWndFromPoint = ::WindowFromPoint(pt);

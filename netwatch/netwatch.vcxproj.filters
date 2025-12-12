@@ -78,6 +78,15 @@
     <ClCompile Include="ProcessUtil.cpp">
       <Filter>Source Files\util</Filter>
     </ClCompile>
+    <ClCompile Include="util\MessageBox.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="util\StringConversion.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="util\WindowsError.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="stdafx.h">
@@ -131,6 +140,18 @@
     <ClInclude Include="ProcessUtil.hpp">
       <Filter>Header Files\util</Filter>
     </ClInclude>
+    <ClInclude Include="util\MessageBox.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="util\StringConversion.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="util\WindowsError.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="util\Error.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="netwatch.rc">
@@ -141,7 +162,7 @@
     <Image Include="res\toolbar.bmp">
       <Filter>Resource Files</Filter>
     </Image>
-    <Image Include="res\netwatch.ico">
+    <Image Include="res\logo.ico">
       <Filter>Resource Files</Filter>
     </Image>
   </ItemGroup>
