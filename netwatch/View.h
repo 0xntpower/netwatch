@@ -11,6 +11,7 @@
 #include <string>
 #include <mutex>
 #include <atomic>
+#include <unordered_map>
 
 // Custom message for background refresh completion
 #define WM_REFRESH_COMPLETE (WM_USER + 100)
@@ -88,6 +89,8 @@ public:
         REFLECTED_NOTIFY_CODE_HANDLER(LVN_COLUMNCLICK, OnColumnClick)
         REFLECTED_NOTIFY_CODE_HANDLER(NM_DBLCLK, OnDoubleClick)
         REFLECTED_NOTIFY_CODE_HANDLER(NM_CUSTOMDRAW, OnCustomDraw)
+        REFLECTED_NOTIFY_CODE_HANDLER(LVN_GETDISPINFO, OnGetDispInfo)
+        REFLECTED_NOTIFY_CODE_HANDLER(LVN_ODFINDITEM, OnOdFindItem)
         DEFAULT_REFLECTION_HANDLER()
     END_MSG_MAP()
 
@@ -98,15 +101,23 @@ public:
     LRESULT OnColumnClick(int idCtrl, LPNMHDR pnmh, BOOL& bHandled);
     LRESULT OnDoubleClick(int idCtrl, LPNMHDR pnmh, BOOL& bHandled);
     LRESULT OnCustomDraw(int idCtrl, LPNMHDR pnmh, BOOL& bHandled);
+    LRESULT OnGetDispInfo(int idCtrl, LPNMHDR pnmh, BOOL& bHandled);
+    LRESULT OnOdFindItem(int idCtrl, LPNMHDR pnmh, BOOL& bHandled);
 
 private:
     // Helper methods
-    void AddEntry(const netwatch::util::EndpointEntry& entry);
-    std::string FormatNumber(uint64_t value);
+    std::wstring GetCellText(int row, int column) const;
+    static std::string FormatNumber(uint64_t value);
+
+    // Generate unique key for connection identification
+    static std::string MakeConnectionKey(const netwatch::util::EndpointEntry& entry);
 
     // Background enumeration
     void EnumerateInBackground();
     void ApplyPendingEntries();
+
+    // Sort entries using current sort column
+    void SortEntries(std::vector<netwatch::util::EndpointEntry>& entries) const;
 
     // Sorting state
     int m_nSortColumn = -1;

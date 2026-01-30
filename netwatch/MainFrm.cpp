@@ -49,7 +49,7 @@ LRESULT CMainFrame::OnCreate(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM /*lParam*/
         rcDefault,
         nullptr,
         WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS | WS_CLIPCHILDREN |
-        LVS_REPORT | LVS_SHOWSELALWAYS | LVS_SINGLESEL,
+        LVS_REPORT | LVS_SHOWSELALWAYS | LVS_SINGLESEL | LVS_OWNERDATA,
         WS_EX_CLIENTEDGE
     );
 

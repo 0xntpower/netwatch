@@ -62,6 +62,10 @@ LRESULT CConnectionListView::OnCreate(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM /
 
 void CConnectionListView::InitColumns()
 {
+    // Note: LVS_OWNERDATA style is set at creation time in MainFrm.cpp
+    // This makes the ListView "virtual" - it doesn't store items,
+    // it asks us for data via LVN_GETDISPINFO when it needs to paint
+
     SetExtendedListViewStyle(
         LVS_EX_FULLROWSELECT |
         LVS_EX_GRIDLINES |
@@ -213,80 +217,128 @@ LRESULT CConnectionListView::OnRefreshComplete(UINT /*uMsg*/, WPARAM /*wParam*/,
 }
 
 void CConnectionListView::ApplyPendingEntries() {
-    SetRedraw(FALSE);
-
-    int nSelectedItem = GetNextItem(-1, LVNI_SELECTED);
-    DWORD selectedPid = 0;
-    std::string selectedProtocol;
-    std::string selectedLocalAddr;
-    uint16_t selectedLocalPort = 0;
-    std::string selectedRemoteAddr;
-    uint16_t selectedRemotePort = 0;
-
-    if (nSelectedItem >= 0) {
-        TCHAR szBuffer[256];
-        GetItemText(nSelectedItem, COL_PID, szBuffer, 256);
-        selectedPid = _ttoi(szBuffer);
-
-        GetItemText(nSelectedItem, COL_PROTOCOL, szBuffer, 256);
-        selectedProtocol = netwatch::util::StringConversion::WideToNarrow(szBuffer);
-
-        GetItemText(nSelectedItem, COL_LOCAL_ADDRESS, szBuffer, 256);
-        selectedLocalAddr = netwatch::util::StringConversion::WideToNarrow(szBuffer);
-
-        GetItemText(nSelectedItem, COL_LOCAL_PORT, szBuffer, 256);
-        selectedLocalPort = static_cast<uint16_t>(_ttoi(szBuffer));
-
-        GetItemText(nSelectedItem, COL_REMOTE_ADDRESS, szBuffer, 256);
-        selectedRemoteAddr = netwatch::util::StringConversion::WideToNarrow(szBuffer);
-
-        GetItemText(nSelectedItem, COL_REMOTE_PORT, szBuffer, 256);
-        if (_tcscmp(szBuffer, _T("*")) != 0) {
-            selectedRemotePort = static_cast<uint16_t>(_ttoi(szBuffer));
-        }
-    }
-
-    int nTopIndex = GetTopIndex();
-
+    // Get new entries and sort them using current sort column
+    std::vector<netwatch::util::EndpointEntry> newEntries;
     {
         std::lock_guard<std::mutex> lock(pendingEntriesMutex_);
-        entries_ = std::move(pendingEntries_);
+        newEntries = std::move(pendingEntries_);
     }
+    SortEntries(newEntries);
 
-    ClearAllConnections();
-    int newSelectedItem = -1;
-    for (size_t i = 0; i < entries_.size(); ++i) {
-        const auto& entry = entries_[i];
-        AddEntry(entry);
+    // Update entries
+    entries_ = std::move(newEntries);
 
-        if (nSelectedItem >= 0 && entry.pid == selectedPid &&
-            entry.protocol == selectedProtocol &&
-            entry.localAddress == selectedLocalAddr &&
-            entry.localPort == selectedLocalPort &&
-            entry.remoteAddress == selectedRemoteAddr &&
-            entry.remotePort == selectedRemotePort) {
-            newSelectedItem = static_cast<int>(i);
-        }
-    }
+    // THIS IS THE KEY: Use ListView_SetItemCountEx with LVSICF_NOSCROLL
+    // This tells the ListView how many items we have WITHOUT changing the scroll position
+    // The ListView will call LVN_GETDISPINFO to get text when it needs to paint
+    ListView_SetItemCountEx(m_hWnd, static_cast<int>(entries_.size()), LVSICF_NOSCROLL);
 
-    if (nTopIndex >= 0 && nTopIndex < GetItemCount()) {
-        int currentTop = GetTopIndex();
-        if (currentTop != nTopIndex) {
-            RECT rcItem;
-            GetItemRect(0, &rcItem, LVIR_BOUNDS);
-            int itemHeight = rcItem.bottom - rcItem.top;
-            int scrollAmount = (nTopIndex - currentTop) * itemHeight;
-            SIZE sz = { 0, scrollAmount };
-            Scroll(sz);
-        }
-    }
-
-    if (newSelectedItem >= 0) {
-        SetItemState(newSelectedItem, LVIS_SELECTED | LVIS_FOCUSED, LVIS_SELECTED | LVIS_FOCUSED);
-    }
-
-    SetRedraw(TRUE);
+    // Invalidate to redraw with new data (but scroll position is preserved!)
     Invalidate();
+}
+
+// LVN_GETDISPINFO handler - provides text for virtual ListView items on demand
+LRESULT CConnectionListView::OnGetDispInfo(int /*idCtrl*/, LPNMHDR pnmh, BOOL& /*bHandled*/)
+{
+    NMLVDISPINFO* pDispInfo = reinterpret_cast<NMLVDISPINFO*>(pnmh);
+    LVITEM* pItem = &pDispInfo->item;
+
+    int row = pItem->iItem;
+    int col = pItem->iSubItem;
+
+    if (row < 0 || row >= static_cast<int>(entries_.size())) {
+        return 0;
+    }
+
+    if (pItem->mask & LVIF_TEXT) {
+        std::wstring text = GetCellText(row, col);
+        // Copy text to the buffer provided by the ListView
+        wcsncpy_s(pItem->pszText, pItem->cchTextMax, text.c_str(), _TRUNCATE);
+    }
+
+    return 0;
+}
+
+// LVN_ODFINDITEM handler - for keyboard navigation/search in virtual ListView
+LRESULT CConnectionListView::OnOdFindItem(int /*idCtrl*/, LPNMHDR pnmh, BOOL& /*bHandled*/)
+{
+    NMLVFINDITEM* pFindInfo = reinterpret_cast<NMLVFINDITEM*>(pnmh);
+
+    if (pFindInfo->lvfi.flags & LVFI_STRING) {
+        std::wstring searchStr = pFindInfo->lvfi.psz;
+        std::transform(searchStr.begin(), searchStr.end(), searchStr.begin(), ::towlower);
+
+        int startPos = pFindInfo->iStart;
+        if (startPos >= static_cast<int>(entries_.size())) {
+            startPos = 0;
+        }
+
+        // Search from startPos to end, then from beginning to startPos
+        for (int i = startPos; i < static_cast<int>(entries_.size()); ++i) {
+            std::wstring processName = static_cast<LPCWSTR>(ATL::CA2W(entries_[i].processName.c_str()));
+            std::transform(processName.begin(), processName.end(), processName.begin(), ::towlower);
+            if (processName.find(searchStr) == 0) {
+                return i;
+            }
+        }
+        for (int i = 0; i < startPos; ++i) {
+            std::wstring processName = static_cast<LPCWSTR>(ATL::CA2W(entries_[i].processName.c_str()));
+            std::transform(processName.begin(), processName.end(), processName.begin(), ::towlower);
+            if (processName.find(searchStr) == 0) {
+                return i;
+            }
+        }
+    }
+
+    return -1; // Not found
+}
+
+// Helper to get text for a specific cell
+std::wstring CConnectionListView::GetCellText(int row, int column) const {
+    if (row < 0 || row >= static_cast<int>(entries_.size())) {
+        return L"";
+    }
+
+    const auto& entry = entries_[row];
+
+    switch (column) {
+        case COL_PROCESS:
+            return static_cast<LPCWSTR>(ATL::CA2W(entry.processName.c_str()));
+        case COL_PID:
+            return std::to_wstring(entry.pid);
+        case COL_PROTOCOL:
+            return static_cast<LPCWSTR>(ATL::CA2W(entry.protocol.c_str()));
+        case COL_INTEGRITY:
+            return static_cast<LPCWSTR>(ATL::CA2W(entry.integrityLevel.c_str()));
+        case COL_LOCAL_ADDRESS:
+            return static_cast<LPCWSTR>(ATL::CA2W(entry.localAddress.c_str()));
+        case COL_LOCAL_PORT:
+            return std::to_wstring(entry.localPort);
+        case COL_REMOTE_ADDRESS:
+            return static_cast<LPCWSTR>(ATL::CA2W(entry.remoteAddress.c_str()));
+        case COL_REMOTE_PORT:
+            return std::to_wstring(entry.remotePort);
+        case COL_STATE:
+            return static_cast<LPCWSTR>(ATL::CA2W(entry.state.c_str()));
+        case COL_ARCHITECTURE:
+            return static_cast<LPCWSTR>(ATL::CA2W(entry.architecture.c_str()));
+        case COL_DEP_STATUS:
+            return static_cast<LPCWSTR>(ATL::CA2W(entry.depStatus.c_str()));
+        case COL_ASLR_STATUS:
+            return static_cast<LPCWSTR>(ATL::CA2W(entry.aslrStatus.c_str()));
+        case COL_EXECUTABLE_PATH:
+            return static_cast<LPCWSTR>(ATL::CA2W(entry.executablePath.c_str()));
+        case COL_CFG_STATUS:
+            return static_cast<LPCWSTR>(ATL::CA2W(entry.cfgStatus.c_str()));
+        case COL_SAFESEH_STATUS:
+            return static_cast<LPCWSTR>(ATL::CA2W(entry.safeSehStatus.c_str()));
+        case COL_BYTES_SENT:
+            return static_cast<LPCWSTR>(ATL::CA2W(FormatNumber(entry.stats.sentBytes).c_str()));
+        case COL_BYTES_RCVD:
+            return static_cast<LPCWSTR>(ATL::CA2W(FormatNumber(entry.stats.rcvdBytes).c_str()));
+        default:
+            return L"";
+    }
 }
 
 bool CConnectionListView::MatchesFilter(const netwatch::util::EndpointEntry& entry) const {
@@ -322,37 +374,96 @@ bool CConnectionListView::ShouldShowEntry(const netwatch::util::EndpointEntry& e
 }
 
 void CConnectionListView::ClearAllConnections() {
-    DeleteAllItems();
-}
-
-void CConnectionListView::AddEntry(const netwatch::util::EndpointEntry& entry) {
-    int nItem = InsertItem(GetItemCount(), ATL::CA2T(entry.processName.c_str()));
-
-    SetItemText(nItem, COL_PID, ATL::CA2T(std::format("{}", entry.pid).c_str()));
-    SetItemText(nItem, COL_PROTOCOL, ATL::CA2T(entry.protocol.c_str()));
-    SetItemText(nItem, COL_INTEGRITY, ATL::CA2T(entry.integrityLevel.c_str()));
-    SetItemText(nItem, COL_LOCAL_ADDRESS, ATL::CA2T(entry.localAddress.c_str()));
-    SetItemText(nItem, COL_LOCAL_PORT, ATL::CA2T(std::format("{}", entry.localPort).c_str()));
-    SetItemText(nItem, COL_REMOTE_ADDRESS, ATL::CA2T(entry.remoteAddress.c_str()));
-
-    // Format remote port
-    SetItemText(nItem, COL_REMOTE_PORT, ATL::CA2T(std::format("{}", entry.remotePort).c_str()));
-
-    SetItemText(nItem, COL_STATE, ATL::CA2T(entry.state.c_str()));
-    SetItemText(nItem, COL_ARCHITECTURE, ATL::CA2T(entry.architecture.c_str()));
-    SetItemText(nItem, COL_DEP_STATUS, ATL::CA2T(entry.depStatus.c_str()));
-    SetItemText(nItem, COL_ASLR_STATUS, ATL::CA2T(entry.aslrStatus.c_str()));
-    SetItemText(nItem, COL_EXECUTABLE_PATH, ATL::CA2T(entry.executablePath.c_str()));
-    SetItemText(nItem, COL_CFG_STATUS, ATL::CA2T(entry.cfgStatus.c_str()));
-    SetItemText(nItem, COL_SAFESEH_STATUS, ATL::CA2T(entry.safeSehStatus.c_str()));
-    SetItemText(nItem, COL_BYTES_SENT, ATL::CA2T(FormatNumber(entry.stats.sentBytes).c_str()));
-    SetItemText(nItem, COL_BYTES_RCVD, ATL::CA2T(FormatNumber(entry.stats.rcvdBytes).c_str()));
-
-    SetItemData(nItem, static_cast<DWORD_PTR>(entry.displayState));
+    entries_.clear();
+    ListView_SetItemCountEx(m_hWnd, 0, 0);
 }
 
 std::string CConnectionListView::FormatNumber(uint64_t value) {
     return std::format("{:L}", value);
+}
+
+std::string CConnectionListView::MakeConnectionKey(const netwatch::util::EndpointEntry& entry) {
+    return std::format("{}:{}:{}:{}:{}:{}",
+        entry.pid,
+        entry.protocol,
+        entry.localAddress,
+        entry.localPort,
+        entry.remoteAddress,
+        entry.remotePort);
+}
+
+void CConnectionListView::SortEntries(std::vector<netwatch::util::EndpointEntry>& entries) const {
+    if (m_nSortColumn < 0) {
+        // Default sort by PID, then protocol
+        std::sort(entries.begin(), entries.end(), [](const auto& a, const auto& b) {
+            if (a.pid != b.pid) return a.pid < b.pid;
+            return a.protocol < b.protocol;
+        });
+        return;
+    }
+
+    std::sort(entries.begin(), entries.end(), [this](const auto& a, const auto& b) {
+        int comparison = 0;
+
+        switch (m_nSortColumn) {
+            case COL_PID:
+                comparison = (a.pid < b.pid) ? -1 : (a.pid > b.pid) ? 1 : 0;
+                break;
+            case COL_LOCAL_PORT:
+                comparison = (a.localPort < b.localPort) ? -1 : (a.localPort > b.localPort) ? 1 : 0;
+                break;
+            case COL_REMOTE_PORT:
+                comparison = (a.remotePort < b.remotePort) ? -1 : (a.remotePort > b.remotePort) ? 1 : 0;
+                break;
+            case COL_BYTES_SENT:
+                comparison = (a.stats.sentBytes < b.stats.sentBytes) ? -1 : (a.stats.sentBytes > b.stats.sentBytes) ? 1 : 0;
+                break;
+            case COL_BYTES_RCVD:
+                comparison = (a.stats.rcvdBytes < b.stats.rcvdBytes) ? -1 : (a.stats.rcvdBytes > b.stats.rcvdBytes) ? 1 : 0;
+                break;
+            case COL_PROCESS:
+                comparison = a.processName.compare(b.processName);
+                break;
+            case COL_PROTOCOL:
+                comparison = a.protocol.compare(b.protocol);
+                break;
+            case COL_INTEGRITY:
+                comparison = a.integrityLevel.compare(b.integrityLevel);
+                break;
+            case COL_LOCAL_ADDRESS:
+                comparison = a.localAddress.compare(b.localAddress);
+                break;
+            case COL_REMOTE_ADDRESS:
+                comparison = a.remoteAddress.compare(b.remoteAddress);
+                break;
+            case COL_STATE:
+                comparison = a.state.compare(b.state);
+                break;
+            case COL_ARCHITECTURE:
+                comparison = a.architecture.compare(b.architecture);
+                break;
+            case COL_DEP_STATUS:
+                comparison = a.depStatus.compare(b.depStatus);
+                break;
+            case COL_ASLR_STATUS:
+                comparison = a.aslrStatus.compare(b.aslrStatus);
+                break;
+            case COL_CFG_STATUS:
+                comparison = a.cfgStatus.compare(b.cfgStatus);
+                break;
+            case COL_SAFESEH_STATUS:
+                comparison = a.safeSehStatus.compare(b.safeSehStatus);
+                break;
+            case COL_EXECUTABLE_PATH:
+                comparison = a.executablePath.compare(b.executablePath);
+                break;
+            default:
+                comparison = 0;
+                break;
+        }
+
+        return m_bSortAscending ? (comparison < 0) : (comparison > 0);
+    });
 }
 
 LRESULT CConnectionListView::OnContextMenu(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM lParam, BOOL& /*bHandled*/)
@@ -426,77 +537,12 @@ LRESULT CConnectionListView::OnColumnClick(int /*idCtrl*/, LPNMHDR pnmh, BOOL& /
         m_bSortAscending = true;
     }
 
-    // Sort entries based on column type
-    std::sort(entries_.begin(), entries_.end(), [this, nColumn](const auto& a, const auto& b) {
-        int comparison = 0;
+    // Sort entries using the shared sort function
+    SortEntries(entries_);
 
-        switch (nColumn) {
-            case COL_PID:
-                comparison = (a.pid < b.pid) ? -1 : (a.pid > b.pid) ? 1 : 0;
-                break;
-            case COL_LOCAL_PORT:
-                comparison = (a.localPort < b.localPort) ? -1 : (a.localPort > b.localPort) ? 1 : 0;
-                break;
-            case COL_REMOTE_PORT:
-                comparison = (a.remotePort < b.remotePort) ? -1 : (a.remotePort > b.remotePort) ? 1 : 0;
-                break;
-            case COL_BYTES_SENT:
-                comparison = (a.stats.sentBytes < b.stats.sentBytes) ? -1 : (a.stats.sentBytes > b.stats.sentBytes) ? 1 : 0;
-                break;
-            case COL_BYTES_RCVD:
-                comparison = (a.stats.rcvdBytes < b.stats.rcvdBytes) ? -1 : (a.stats.rcvdBytes > b.stats.rcvdBytes) ? 1 : 0;
-                break;
-            case COL_PROCESS:
-                comparison = a.processName.compare(b.processName);
-                break;
-            case COL_PROTOCOL:
-                comparison = a.protocol.compare(b.protocol);
-                break;
-            case COL_INTEGRITY:
-                comparison = a.integrityLevel.compare(b.integrityLevel);
-                break;
-            case COL_LOCAL_ADDRESS:
-                comparison = a.localAddress.compare(b.localAddress);
-                break;
-            case COL_REMOTE_ADDRESS:
-                comparison = a.remoteAddress.compare(b.remoteAddress);
-                break;
-            case COL_STATE:
-                comparison = a.state.compare(b.state);
-                break;
-            case COL_ARCHITECTURE:
-                comparison = a.architecture.compare(b.architecture);
-                break;
-            case COL_DEP_STATUS:
-                comparison = a.depStatus.compare(b.depStatus);
-                break;
-            case COL_ASLR_STATUS:
-                comparison = a.aslrStatus.compare(b.aslrStatus);
-                break;
-            case COL_CFG_STATUS:
-                comparison = a.cfgStatus.compare(b.cfgStatus);
-                break;
-            case COL_SAFESEH_STATUS:
-                comparison = a.safeSehStatus.compare(b.safeSehStatus);
-                break;
-            case COL_EXECUTABLE_PATH:
-                comparison = a.executablePath.compare(b.executablePath);
-                break;
-            default:
-                comparison = 0;
-                break;
-        }
-
-        return m_bSortAscending ? (comparison < 0) : (comparison > 0);
-    });
-
-    // Refresh display with sorted entries
-    SetRedraw(FALSE);
-    ClearAllConnections();
-    for (const auto& entry : entries_) {
-        AddEntry(entry);
-    }
-    SetRedraw(TRUE);
+    // For virtual ListView, just invalidate to redraw with new sort order
+    // LVSICF_NOSCROLL keeps the scroll position stable
+    ListView_SetItemCountEx(m_hWnd, static_cast<int>(entries_.size()), LVSICF_NOSCROLL);
     Invalidate();
 
     return 0;
@@ -517,8 +563,7 @@ LRESULT CConnectionListView::OnDoubleClick(int /*idCtrl*/, LPNMHDR /*pnmh*/, BOO
 LRESULT CConnectionListView::OnCustomDraw(int /*idCtrl*/, LPNMHDR pnmh, BOOL& /*bHandled*/)
 {
     // Custom draw handler for color-coding connections similar to TCPView
-    // TCPView uses: Green for new connections, Red for closing/closed connections
-    // Yellow/highlight background for recently modified connections
+    // For virtual ListView, we get the display state from entries_ directly
 
     LPNMLVCUSTOMDRAW pLVCD = reinterpret_cast<LPNMLVCUSTOMDRAW>(pnmh);
 
@@ -530,28 +575,32 @@ LRESULT CConnectionListView::OnCustomDraw(int /*idCtrl*/, LPNMHDR pnmh, BOOL& /*
 
     case CDDS_ITEMPREPAINT:
         {
-            // Get the display state from item data
-            auto displayState = static_cast<netwatch::util::EndpointEntry::DisplayState>(pLVCD->nmcd.lItemlParam);
+            int row = static_cast<int>(pLVCD->nmcd.dwItemSpec);
 
             // Set default colors (black text on white background)
             pLVCD->clrText = RGB(0, 0, 0);
             pLVCD->clrTextBk = RGB(255, 255, 255);
 
-            // Apply color coding based on display state
-            switch (displayState) {
-            case netwatch::util::EndpointEntry::DisplayState::New:
-                pLVCD->clrText = RGB(0, 128, 0);        // Green for new
-                break;
-            case netwatch::util::EndpointEntry::DisplayState::Closed:
-                pLVCD->clrText = RGB(255, 0, 0);        // Red for closed
-                break;
-            case netwatch::util::EndpointEntry::DisplayState::Modified:
-                pLVCD->clrTextBk = RGB(255, 255, 192);  // Yellow background for modified
-                break;
-            case netwatch::util::EndpointEntry::DisplayState::Normal:
-            default:
-                // Keep default black on white
-                break;
+            // Get display state from entries_ for virtual ListView
+            if (row >= 0 && row < static_cast<int>(entries_.size())) {
+                auto displayState = entries_[row].displayState;
+
+                // Apply color coding based on display state
+                switch (displayState) {
+                case netwatch::util::EndpointEntry::DisplayState::New:
+                    pLVCD->clrText = RGB(0, 128, 0);        // Green for new
+                    break;
+                case netwatch::util::EndpointEntry::DisplayState::Closed:
+                    pLVCD->clrText = RGB(255, 0, 0);        // Red for closed
+                    break;
+                case netwatch::util::EndpointEntry::DisplayState::Modified:
+                    pLVCD->clrTextBk = RGB(255, 255, 192);  // Yellow background for modified
+                    break;
+                case netwatch::util::EndpointEntry::DisplayState::Normal:
+                default:
+                    // Keep default black on white
+                    break;
+                }
             }
 
             return CDRF_NEWFONT;
@@ -594,13 +643,7 @@ void CConnectionListView::ShowColumn(int columnIndex, bool show) {
         DeleteColumn(currentPos);
     }
 
-    // Refresh the list to update the display
-    SetRedraw(FALSE);
-    ClearAllConnections();
-    for (const auto& entry : entries_) {
-        AddEntry(entry);
-    }
-    SetRedraw(TRUE);
+    // For virtual ListView, just invalidate to redraw
     Invalidate();
 }
 
