@@ -72,11 +72,17 @@ public:
     // Clear all connections
     void ClearAllConnections();
 
-    // Set process filter
-    void SetFilter(const std::string& filter) { processFilter_ = filter; }
+    // Set process filter (thread-safe)
+    void SetFilter(const std::string& filter) {
+        std::lock_guard<std::mutex> lock(pendingEntriesMutex_);
+        processFilter_ = filter;
+    }
 
-    // Set whether to show unconnected endpoints
-    void SetShowUnconnected(bool show) { showUnconnected_ = show; }
+    // Set whether to show unconnected endpoints (thread-safe)
+    void SetShowUnconnected(bool show) {
+        std::lock_guard<std::mutex> lock(pendingEntriesMutex_);
+        showUnconnected_ = show;
+    }
 
     // Get current connection statistics (for status bar)
     const ConnectionStats& GetStats() const { return connectionStats_; }

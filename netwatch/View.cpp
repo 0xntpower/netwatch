@@ -140,6 +140,16 @@ void CConnectionListView::EnumerateInBackground() {
         return;
     }
 
+    // Capture filter settings at start of enumeration for thread safety
+    // This ensures consistent filtering even if settings change during enumeration
+    std::string currentFilter;
+    bool currentShowUnconnected;
+    {
+        std::lock_guard<std::mutex> lock(pendingEntriesMutex_);
+        currentFilter = processFilter_;
+        currentShowUnconnected = showUnconnected_;
+    }
+
     auto tcpEntries = netwatch::net::TcpEnumerator::Enumerate();
     auto udpEntries = netwatch::net::UdpEnumerator::Enumerate();
 
@@ -159,14 +169,29 @@ void CConnectionListView::EnumerateInBackground() {
 
     allEntries.erase(
         std::remove_if(allEntries.begin(), allEntries.end(),
-            [this](const auto& entry) {
-                if (!processFilter_.empty() && !MatchesFilter(entry)) {
-                    return true;
+            [&currentFilter, currentShowUnconnected](const auto& entry) {
+                // Filter by process name if filter is set
+                if (!currentFilter.empty()) {
+                    std::string processNameLower = entry.processName;
+                    std::string filterLower = currentFilter;
+                    std::transform(processNameLower.begin(), processNameLower.end(), processNameLower.begin(), ::tolower);
+                    std::transform(filterLower.begin(), filterLower.end(), filterLower.begin(), ::tolower);
+                    if (processNameLower.find(filterLower) == std::string::npos) {
+                        return true;  // Remove: doesn't match filter
+                    }
                 }
-                if (!showUnconnected_ && !ShouldShowEntry(entry)) {
-                    return true;
+                // Filter unconnected endpoints if setting is disabled
+                if (!currentShowUnconnected) {
+                    if (entry.state == "LISTENING") {
+                        return true;  // Remove LISTENING sockets
+                    }
+                    if (entry.protocol == "UDP" || entry.protocol == "UDPv6") {
+                        if (entry.remoteAddress == "0.0.0.0" || entry.remoteAddress.empty()) {
+                            return true;  // Remove UDP endpoints without remote
+                        }
+                    }
                 }
-                return false;
+                return false;  // Keep this entry
             }),
         allEntries.end());
 

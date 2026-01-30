@@ -245,15 +245,23 @@ LRESULT CMainFrame::OnProcessEnd(WORD /*wNotifyCode*/, WORD /*wID*/, HWND /*hWnd
     int nSelected = m_view.GetNextItem(-1, LVNI_SELECTED);
     if (nSelected >= 0)
     {
-        // Get PID from the selected item
+        // Get PID and process name from the selected item
+        // IMPORTANT: Capture these values immediately to avoid race with refresh
         TCHAR szPid[32];
         m_view.GetItemText(nSelected, COL_PID, szPid, 32);
         DWORD pid = _ttoi(szPid);
 
-        // Get process name for confirmation message
         TCHAR szProcess[MAX_PATH];
         m_view.GetItemText(nSelected, COL_PROCESS, szProcess, MAX_PATH);
         std::string processName = netwatch::util::StringConversion::WideToNarrow(szProcess);
+
+        // Validate PID is still valid (process still exists)
+        if (pid == 0) {
+            netwatch::util::MessageBox::ShowError(m_hWnd,
+                "Invalid process selection. The list may have refreshed.\n\nPlease re-select the process and try again.",
+                "End Process");
+            return 0;
+        }
 
         // Confirm with user before terminating (critical operation!)
         std::ostringstream oss;
@@ -287,10 +295,19 @@ LRESULT CMainFrame::OnProcessCloseConnection(WORD /*wNotifyCode*/, WORD /*wID*/,
     int nSelected = m_view.GetNextItem(-1, LVNI_SELECTED);
     if (nSelected >= 0)
     {
+        // IMPORTANT: Capture all connection details immediately to avoid race with refresh
         // Get protocol to ensure this is a TCP connection
         TCHAR szProtocol[16];
         m_view.GetItemText(nSelected, COL_PROTOCOL, szProtocol, 16);
         std::string protocol = netwatch::util::StringConversion::WideToNarrow(szProtocol);
+
+        // Validate we got valid data (list may have refreshed)
+        if (protocol.empty()) {
+            netwatch::util::MessageBox::ShowError(m_hWnd,
+                "Invalid connection selection. The list may have refreshed.\n\nPlease re-select the connection and try again.",
+                "Close Connection");
+            return 0;
+        }
 
         // Check if it's TCP (or TCPv6, but we only support IPv4 for now)
         if (protocol != "TCP" && protocol != "TCPv6")
