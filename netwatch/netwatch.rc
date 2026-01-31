@@ -152,7 +152,7 @@ FONT 9, "Segoe UI"
 BEGIN
     ICON            IDR_MAINFRAME,IDC_STATIC,14,14,21,20
     LTEXT           "NetWatch",IDC_STATIC,45,14,220,14,SS_NOPREFIX
-    LTEXT           "Version 1.0.0",IDC_STATIC,45,30,220,8
+    LTEXT           "Version 1.0.1",IDC_STATIC,45,30,220,8
     LTEXT           "Advanced Network Connection Monitor",IDC_STATIC,45,42,220,8
     LTEXT           "Displays active TCP/UDP connections with detailed process and security context information.",IDC_STATIC,45,56,220,16
     LTEXT           "Developed by ntpower",IDC_STATIC,45,76,220,8
