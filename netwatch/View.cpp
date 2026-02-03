@@ -10,6 +10,8 @@
 #include <iterator>
 #include <format>
 #include <process.h>
+#include <uxtheme.h>
+#pragma comment(lib, "uxtheme.lib")
 
 const CConnectionListView::ColumnInfo CConnectionListView::kColumnInfo[COL_COUNT] = {
     { L"Process Name", LVCFMT_LEFT, 150 },
@@ -66,9 +68,11 @@ void CConnectionListView::InitColumns()
     // This makes the ListView "virtual" - it doesn't store items,
     // it asks us for data via LVN_GETDISPINFO when it needs to paint
 
+    // Apply the Explorer visual theme for modern selection highlights and hover effects
+    ::SetWindowTheme(m_hWnd, L"Explorer", nullptr);
+
     SetExtendedListViewStyle(
         LVS_EX_FULLROWSELECT |
-        LVS_EX_GRIDLINES |
         LVS_EX_HEADERDRAGDROP |
         LVS_EX_DOUBLEBUFFER
     );

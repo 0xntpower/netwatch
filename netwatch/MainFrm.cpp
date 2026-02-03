@@ -64,18 +64,25 @@ LRESULT CMainFrame::OnCreate(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM /*lParam*/
     pLoop->AddMessageFilter(this);
     pLoop->AddIdleHandler(this);
 
+    // Scale status bar controls for the current DPI
+    HDC hDC = ::GetDC(m_hWnd);
+    int dpi = ::GetDeviceCaps(hDC, LOGPIXELSX);
+    ::ReleaseDC(m_hWnd, hDC);
+    if (dpi == 0) dpi = 96;
+    auto scale = [dpi](int value) { return ::MulDiv(value, dpi, 96); };
+
     RECT rcStatusBar;
     ::GetClientRect(m_hWndStatusBar, &rcStatusBar);
 
-    int sliderWidth = 150;
-    int labelWidth = 95;
-    int rightMargin = 10;
-    int controlHeight = kStatusBarControlHeight;
-    int topMargin = 3;
+    int sliderWidth = scale(150);
+    int labelWidth = scale(95);
+    int rightMargin = scale(10);
+    int controlHeight = scale(kStatusBarControlHeight);
+    int topMargin = scale(3);
 
     int sliderRight = rcStatusBar.right - rightMargin;
     int sliderLeft = sliderRight - sliderWidth;
-    int labelRight = sliderLeft - 5;
+    int labelRight = sliderLeft - scale(5);
     int labelLeft = labelRight - labelWidth;
 
     RECT rcLabel = { labelLeft, topMargin, labelRight, topMargin + controlHeight };
@@ -599,18 +606,24 @@ LRESULT CMainFrame::OnSize(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM /*lParam*/, 
 
     if (m_updateFreqSlider.IsWindow() && m_updateFreqLabel.IsWindow())
     {
+        HDC hDC = ::GetDC(m_hWnd);
+        int dpi = ::GetDeviceCaps(hDC, LOGPIXELSX);
+        ::ReleaseDC(m_hWnd, hDC);
+        if (dpi == 0) dpi = 96;
+        auto scale = [dpi](int value) { return ::MulDiv(value, dpi, 96); };
+
         RECT rcStatusBar;
         ::GetClientRect(m_hWndStatusBar, &rcStatusBar);
 
-        int sliderWidth = 150;
-        int labelWidth = 95;
-        int rightMargin = 10;
-        int controlHeight = kStatusBarControlHeight;
-        int topMargin = 3;
+        int sliderWidth = scale(150);
+        int labelWidth = scale(95);
+        int rightMargin = scale(10);
+        int controlHeight = scale(kStatusBarControlHeight);
+        int topMargin = scale(3);
 
         int sliderRight = rcStatusBar.right - rightMargin;
         int sliderLeft = sliderRight - sliderWidth;
-        int labelRight = sliderLeft - 5;
+        int labelRight = sliderLeft - scale(5);
         int labelLeft = labelRight - labelWidth;
 
         m_updateFreqLabel.SetWindowPos(nullptr, labelLeft, topMargin, labelWidth, controlHeight, SWP_NOZORDER);
