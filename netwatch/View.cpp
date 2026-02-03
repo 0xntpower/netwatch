@@ -250,6 +250,14 @@ void CConnectionListView::ApplyPendingEntries() {
     }
     SortEntries(newEntries);
 
+    // Save the identity of the currently selected item so we can re-select it
+    // after the entries are replaced (the index alone is meaningless since rows shift)
+    std::string selectedKey;
+    int nSelected = GetNextItem(-1, LVNI_SELECTED);
+    if (nSelected >= 0 && nSelected < static_cast<int>(entries_.size())) {
+        selectedKey = MakeConnectionKey(entries_[nSelected]);
+    }
+
     // Update entries
     entries_ = std::move(newEntries);
 
@@ -257,6 +265,32 @@ void CConnectionListView::ApplyPendingEntries() {
     // This tells the ListView how many items we have WITHOUT changing the scroll position
     // The ListView will call LVN_GETDISPINFO to get text when it needs to paint
     ListView_SetItemCountEx(m_hWnd, static_cast<int>(entries_.size()), LVSICF_NOSCROLL);
+
+    // Restore selection to the same connection in the new entry list
+    if (!selectedKey.empty()) {
+        int newIndex = -1;
+        for (int i = 0; i < static_cast<int>(entries_.size()); ++i) {
+            if (MakeConnectionKey(entries_[i]) == selectedKey) {
+                newIndex = i;
+                break;
+            }
+        }
+
+        if (newIndex >= 0) {
+            // Deselect old index if it differs, then select the correct one
+            if (newIndex != nSelected) {
+                if (nSelected >= 0 && nSelected < static_cast<int>(entries_.size())) {
+                    SetItemState(nSelected, 0, LVIS_SELECTED | LVIS_FOCUSED);
+                }
+                SetItemState(newIndex, LVIS_SELECTED | LVIS_FOCUSED, LVIS_SELECTED | LVIS_FOCUSED);
+            }
+        } else {
+            // The previously selected connection no longer exists; clear stale selection
+            if (nSelected >= 0 && nSelected < static_cast<int>(entries_.size())) {
+                SetItemState(nSelected, 0, LVIS_SELECTED | LVIS_FOCUSED);
+            }
+        }
+    }
 
     // Invalidate to redraw with new data (but scroll position is preserved!)
     Invalidate();

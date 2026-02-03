@@ -349,8 +349,11 @@ LRESULT CMainFrame::OnProcessCloseConnection(WORD /*wNotifyCode*/, WORD /*wID*/,
         std::string localAddrStr = netwatch::util::StringConversion::WideToNarrow(szLocalAddr);
         std::string remoteAddrStr = netwatch::util::StringConversion::WideToNarrow(szRemoteAddr);
 
-        DWORD localAddr = inet_addr(localAddrStr.c_str());
-        DWORD remoteAddr = inet_addr(remoteAddrStr.c_str());
+        IN_ADDR localIn{}, remoteIn{};
+        inet_pton(AF_INET, localAddrStr.c_str(), &localIn);
+        inet_pton(AF_INET, remoteAddrStr.c_str(), &remoteIn);
+        DWORD localAddr = localIn.s_addr;
+        DWORD remoteAddr = remoteIn.s_addr;
         DWORD localPort = htons(_ttoi(szLocalPort));
         DWORD remotePort = htons(_ttoi(szRemotePort));
 
