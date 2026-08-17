@@ -6,12 +6,14 @@
 #pragma once
 
 #include "util/Types.h"
+#include "system/ProcessCache.h"
 
 #include <vector>
 #include <string>
 #include <mutex>
 #include <atomic>
 #include <unordered_map>
+#include <unordered_set>
 
 // Custom message for background refresh completion
 #define WM_REFRESH_COMPLETE (WM_USER + 100)
@@ -65,12 +67,35 @@ public:
     // Refresh connection data from the network monitoring core (async)
     void RefreshConnections();
 
-    // Column visibility management
+    // Column visibility management. Indices are logical (ConnectionListColumns),
+    // never ListView subitem indices.
     void ShowColumn(int columnIndex, bool show);
     bool IsColumnVisible(int columnIndex) const;
 
-    // Clear all connections
-    void ClearAllConnections();
+    // Map between ListView subitem indices and logical column indices. These
+    // diverge as soon as any column is hidden.
+    int LogicalColumn(int visibleIndex) const;
+    int VisibleColumn(int logicalIndex) const;
+
+    // Column metadata, for the column chooser.
+    static const wchar_t* ColumnName(int logicalIndex);
+    static bool IsColumnVisibleByDefault(int logicalIndex);
+
+    // Read a field straight out of the backing data. Command handlers must use
+    // this rather than GetItemText, which takes a subitem index and would read
+    // the wrong field whenever a column is hidden.
+    bool GetEntry(int row, netwatch::util::EndpointEntry& out) const;
+
+    // Tab-separated text for the selected rows, or every row when the selection
+    // is empty. Uses the currently visible columns, in display order.
+    std::wstring BuildClipboardText() const;
+
+    // Re-scale default column widths after the window changes monitor.
+    void OnDpiChanged();
+
+    // Column visibility, widths and sort order, persisted between sessions.
+    void SaveLayout() const;
+    void LoadLayout();
 
     // Set process filter (thread-safe)
     void SetFilter(const std::string& filter) {
@@ -97,6 +122,7 @@ public:
         REFLECTED_NOTIFY_CODE_HANDLER(NM_CUSTOMDRAW, OnCustomDraw)
         REFLECTED_NOTIFY_CODE_HANDLER(LVN_GETDISPINFO, OnGetDispInfo)
         REFLECTED_NOTIFY_CODE_HANDLER(LVN_ODFINDITEM, OnOdFindItem)
+        REFLECTED_NOTIFY_CODE_HANDLER(LVN_GETINFOTIP, OnGetInfoTip)
         DEFAULT_REFLECTION_HANDLER()
     END_MSG_MAP()
 
@@ -109,11 +135,24 @@ public:
     LRESULT OnCustomDraw(int idCtrl, LPNMHDR pnmh, BOOL& bHandled);
     LRESULT OnGetDispInfo(int idCtrl, LPNMHDR pnmh, BOOL& bHandled);
     LRESULT OnOdFindItem(int idCtrl, LPNMHDR pnmh, BOOL& bHandled);
+    LRESULT OnGetInfoTip(int idCtrl, LPNMHDR pnmh, BOOL& bHandled);
 
 private:
-    // Helper methods
+    // Helper methods. 'column' is a logical ConnectionListColumns value.
     std::wstring GetCellText(int row, int column) const;
     static std::string FormatNumber(uint64_t value);
+
+    // Rebuild the header and the visible-to-logical column map.
+    void RebuildColumns();
+    void UpdateSortIndicator();
+
+    // Sampled once per paint cycle in CDDS_PREPAINT.
+    static bool QueryHighContrast();
+    bool highContrast_ = false;
+
+    // Attach the shell's system image list once the first icon exists.
+    void EnsureImageList();
+    bool imageListAttached_ = false;
 
     // Generate unique key for connection identification
     static std::string MakeConnectionKey(const netwatch::util::EndpointEntry& entry);
@@ -121,6 +160,7 @@ private:
     // Background enumeration
     void EnumerateInBackground();
     void ApplyPendingEntries();
+    void RestoreSelection(const std::string& selectedKey, int previousIndex);
 
     // Sort entries using current sort column
     void SortEntries(std::vector<netwatch::util::EndpointEntry>& entries) const;
@@ -150,8 +190,23 @@ private:
     // Show unconnected endpoints (LISTENING, UDP without remote)
     bool showUnconnected_ = true;
 
-    // Column visibility state
+    // Per-PID metadata, reused across refreshes. Only touched on the worker
+    // thread, and only one enumeration pass runs at a time.
+    netwatch::system::ProcessCache processCache_;
+
+    // Column visibility state, indexed by logical column.
     bool columnVisible_[COL_COUNT];
+
+    // visibleToLogical_[subitemIndex] == logical column currently drawn there.
+    std::vector<int> visibleToLogical_;
+
+    // Columns the user has resized by hand. Those keep their width across a DPI
+    // change instead of snapping back to the scaled default.
+    bool userSizedColumn_[COL_COUNT] = {};
+
+    // Widths restored from the previous session, normalised to 96 DPI. Empty
+    // when there is nothing saved.
+    std::vector<int> savedWidths_;
 
     // Column metadata
     struct ColumnInfo {
@@ -161,11 +216,6 @@ private:
     };
     static const ColumnInfo kColumnInfo[COL_COUNT];
 
-    // Check if entry matches filter
-    bool MatchesFilter(const netwatch::util::EndpointEntry& entry) const;
-
-    // Check if entry should be shown based on show unconnected setting
-    bool ShouldShowEntry(const netwatch::util::EndpointEntry& entry) const;
 };
 
 // Typedef for backwards compatibility

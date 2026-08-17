@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|Win32">
@@ -66,7 +66,28 @@
   <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
   </ImportGroup>
-  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup Label="UserMacros">
+    <!-- WTL is header-only. Resolved from a vendored copy first, then the NuGet
+         package cache. Override WtlIncludeDir on the command line to point
+         somewhere else. -->
+    <WtlIncludeDir Condition="'$(WtlIncludeDir)' == '' And Exists('$(ProjectDir)..\extern\wtl\include\atlapp.h')">$(ProjectDir)..\extern\wtl\include</WtlIncludeDir>
+    <NuGetPackageRoot Condition="'$(NuGetPackageRoot)' == ''">$(UserProfile)\.nuget\packages\</NuGetPackageRoot>
+    <WtlIncludeDir Condition="'$(WtlIncludeDir)' == '' And Exists('$(NuGetPackageRoot)wtl\10.0.10320\lib\native\include\atlapp.h')">$(NuGetPackageRoot)wtl\10.0.10320\lib\native\include</WtlIncludeDir>
+  </PropertyGroup>
+  <Target Name="NetWatchCheckWtl" BeforeTargets="ClCompile" Condition="'$(WtlIncludeDir)' == ''">
+    <Error Text="WTL headers not found. Install the 'wtl' NuGet package, vendor it at extern\wtl, or build with /p:WtlIncludeDir=&lt;path to WTL include&gt;." />
+  </Target>
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <AdditionalIncludeDirectories>$(WtlIncludeDir);$(ProjectDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ClCompile>
+    <ResourceCompile>
+      <AdditionalIncludeDirectories>$(WtlIncludeDir);$(ProjectDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ResourceCompile>
+    <Manifest>
+      <AdditionalManifestFiles>$(ProjectDir)netwatch.manifest;%(AdditionalManifestFiles)</AdditionalManifestFiles>
+    </Manifest>
+  </ItemDefinitionGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <LinkIncremental>true</LinkIncremental>
   </PropertyGroup>
@@ -79,11 +100,6 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <LinkIncremental>false</LinkIncremental>
   </PropertyGroup>
-  <ItemDefinitionGroup>
-    <Manifest>
-      <EnableDpiAwareness>PerMonitorHighDPIAware</EnableDpiAwareness>
-    </Manifest>
-  </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
       <PrecompiledHeader>Use</PrecompiledHeader>
@@ -126,7 +142,7 @@
       <Optimization>Disabled</Optimization>
       <PreprocessorDefinitions>WIN32;_WINDOWS;STRICT;_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <LanguageStandard>stdcpp20</LanguageStandard>
-      <AdditionalIncludeDirectories>C:\Users\itag7\ll_projects\netwatch\netwatch;C:\Users\itag7\ll_projects\netwatch\netwatch\util;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)util;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -232,6 +248,9 @@
     </Midl>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <Manifest Include="netwatch.manifest" />
+  </ItemGroup>
+  <ItemGroup>
     <ClCompile Include="AboutDlg.cpp" />
     <ClCompile Include="MainFrm.cpp" />
     <ClCompile Include="net\ConnectionStatsProvider.cpp" />
@@ -247,17 +266,19 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Create</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="system\IntegrityLevelResolver.cpp" />
-    <ClCompile Include="system\ProcessInfo.cpp" />
+    <ClCompile Include="system\ProcessCache.cpp" />
     <ClCompile Include="util\AddressFormatter.cpp" />
     <ClCompile Include="util\CommandLineParser.cpp" />
     <ClCompile Include="util\HandleGuard.cpp" />
     <ClCompile Include="util\MessageBox.cpp" />
+    <ClCompile Include="util\Settings.cpp" />
     <ClCompile Include="util\StringConversion.cpp" />
     <ClCompile Include="util\WindowsError.cpp" />
     <ClCompile Include="View.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="AboutDlg.h" />
+    <ClInclude Include="ColumnsDlg.h" />
     <ClInclude Include="FilterDlg.h" />
     <ClInclude Include="MainFrm.h" />
     <ClInclude Include="net\ConnectionStatsProvider.h" />
@@ -268,13 +289,15 @@
     <ClInclude Include="resource.h" />
     <ClInclude Include="stdafx.h" />
     <ClInclude Include="system\IntegrityLevelResolver.h" />
-    <ClInclude Include="system\ProcessInfo.h" />
+    <ClInclude Include="system\ProcessCache.h" />
     <ClInclude Include="util\AddressFormatter.h" />
     <ClInclude Include="util\CommandLineParser.h" />
     <ClInclude Include="util\Error.h" />
     <ClInclude Include="util\HandleGuard.h" />
     <ClInclude Include="util\MessageBox.h" />
     <ClInclude Include="util\StringConversion.h" />
+    <ClInclude Include="util\Dpi.h" />
+    <ClInclude Include="util\Settings.h" />
     <ClInclude Include="util\Types.h" />
     <ClInclude Include="util\WindowsError.h" />
     <ClInclude Include="View.h" />

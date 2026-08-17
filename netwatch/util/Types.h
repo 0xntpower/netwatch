@@ -26,6 +26,16 @@ struct EndpointEntry {
     std::string state;
     ConnectionStats stats;
 
+    // Whether this endpoint is actually talking to a peer. Set by the
+    // enumerators, which know the protocol semantics. Do not re-derive it by
+    // string-matching remoteAddress: TCP uses "0.0.0.0" for an unbound peer and
+    // UDP uses "*", so any single comparison silently misses one of them.
+    bool hasRemote = false;
+
+    // TCP byte counters require ESTATS collection, which needs elevation. False
+    // means "not measured", which is different from a genuine zero.
+    bool statsAvailable = false;
+
     // Security-related process information
     std::string architecture;      // x86 or x64
     std::string depStatus;         // DEP/NX status (Enabled/Disabled/N/A)
@@ -33,6 +43,9 @@ struct EndpointEntry {
     std::string executablePath;    // Full path to the executable
     std::string cfgStatus;         // Control Flow Guard status (Enabled/Disabled/N/A)
     std::string safeSehStatus;     // SafeSEH status (Enabled/Disabled/N/A)
+
+    // Index into the shell's system image list, or -1 when unresolved.
+    int iconIndex = -1;
 
     // Display state for GUI color coding
     enum class DisplayState {

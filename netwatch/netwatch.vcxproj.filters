@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
     <Filter Include="Source Files">
@@ -60,7 +60,7 @@
     <ClCompile Include="net\ConnectionStatsProvider.cpp">
       <Filter>Source Files\net</Filter>
     </ClCompile>
-    <ClCompile Include="system\ProcessInfo.cpp">
+    <ClCompile Include="system\ProcessCache.cpp">
       <Filter>Source Files\system</Filter>
     </ClCompile>
     <ClCompile Include="system\IntegrityLevelResolver.cpp">
@@ -79,6 +79,9 @@
       <Filter>Source Files\util</Filter>
     </ClCompile>
     <ClCompile Include="util\MessageBox.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="util\Settings.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="util\StringConversion.cpp">
@@ -101,6 +104,9 @@
     <ClInclude Include="AboutDlg.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="ColumnsDlg.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="FilterDlg.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -119,7 +125,7 @@
     <ClInclude Include="net\ConnectionStatsProvider.h">
       <Filter>Header Files\net</Filter>
     </ClInclude>
-    <ClInclude Include="system\ProcessInfo.h">
+    <ClInclude Include="system\ProcessCache.h">
       <Filter>Header Files\system</Filter>
     </ClInclude>
     <ClInclude Include="system\IntegrityLevelResolver.h">

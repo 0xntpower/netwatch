@@ -5,12 +5,15 @@
 #include "net/UdpEnumerator.h"
 #include "util/StringConversion.h"
 #include "util/Error.h"
+#include "util/Dpi.h"
+#include "util/Settings.h"
 
 #include <algorithm>
 #include <iterator>
 #include <format>
 #include <process.h>
 #include <uxtheme.h>
+
 #pragma comment(lib, "uxtheme.lib")
 
 const CConnectionListView::ColumnInfo CConnectionListView::kColumnInfo[COL_COUNT] = {
@@ -32,6 +35,16 @@ const CConnectionListView::ColumnInfo CConnectionListView::kColumnInfo[COL_COUNT
     { L"Bytes Sent", LVCFMT_RIGHT, 100 },
     { L"Bytes Received", LVCFMT_RIGHT, 100 }
 };
+
+bool CConnectionListView::QueryHighContrast()
+{
+    HIGHCONTRAST hc = {};
+    hc.cbSize = sizeof(hc);
+    if (!::SystemParametersInfo(SPI_GETHIGHCONTRAST, sizeof(hc), &hc, 0)) {
+        return false;
+    }
+    return (hc.dwFlags & HCF_HIGHCONTRASTON) != 0;
+}
 
 CConnectionListView::~CConnectionListView()
 {
@@ -62,35 +75,224 @@ LRESULT CConnectionListView::OnCreate(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM /
     return 0;
 }
 
+// Column layout and sort order, persisted per user.
+//
+// Widths are stored at the DPI they were captured at, normalised back to 96,
+// so moving between monitors of different scale does not slowly shrink or grow
+// them across sessions.
+void CConnectionListView::SaveLayout() const
+{
+    std::vector<int> visible(COL_COUNT);
+    for (int i = 0; i < COL_COUNT; ++i) {
+        visible[i] = columnVisible_[i] ? 1 : 0;
+    }
+    netwatch::util::Settings::SetIntArray(L"ColumnVisible", visible);
+
+    const int dpi = netwatch::util::DpiForWindow(m_hWnd);
+    std::vector<int> widths(COL_COUNT, 0);
+    for (size_t v = 0; v < visibleToLogical_.size(); ++v) {
+        const int actual = const_cast<CConnectionListView*>(this)->GetColumnWidth(static_cast<int>(v));
+        widths[visibleToLogical_[v]] = ::MulDiv(actual, netwatch::util::kReferenceDpi, dpi);
+    }
+    netwatch::util::Settings::SetIntArray(L"ColumnWidths", widths);
+
+    std::vector<int> sized(COL_COUNT);
+    for (int i = 0; i < COL_COUNT; ++i) {
+        sized[i] = userSizedColumn_[i] ? 1 : 0;
+    }
+    netwatch::util::Settings::SetIntArray(L"ColumnUserSized", sized);
+
+    netwatch::util::Settings::SetInt(L"SortColumn", m_nSortColumn);
+    netwatch::util::Settings::SetInt(L"SortAscending", m_bSortAscending ? 1 : 0);
+}
+
+void CConnectionListView::LoadLayout()
+{
+    const auto visible = netwatch::util::Settings::GetIntArray(L"ColumnVisible");
+    if (visible.size() == COL_COUNT) {
+        bool any = false;
+        for (int i = 0; i < COL_COUNT; ++i) {
+            columnVisible_[i] = (visible[i] != 0);
+            any = any || columnVisible_[i];
+        }
+        // Never load a state with nothing visible, however it got written.
+        if (!any) {
+            for (int i = 0; i < COL_COUNT; ++i) {
+                columnVisible_[i] = IsColumnVisibleByDefault(i);
+            }
+        }
+    }
+
+    const auto sized = netwatch::util::Settings::GetIntArray(L"ColumnUserSized");
+    if (sized.size() == COL_COUNT) {
+        for (int i = 0; i < COL_COUNT; ++i) {
+            userSizedColumn_[i] = (sized[i] != 0);
+        }
+    }
+
+    savedWidths_ = netwatch::util::Settings::GetIntArray(L"ColumnWidths");
+    if (savedWidths_.size() != COL_COUNT) {
+        savedWidths_.clear();
+    }
+
+    const int sortColumn = netwatch::util::Settings::GetInt(L"SortColumn", -1);
+    if (sortColumn >= -1 && sortColumn < COL_COUNT) {
+        m_nSortColumn = sortColumn;
+    }
+    m_bSortAscending = netwatch::util::Settings::GetInt(L"SortAscending", 1) != 0;
+}
+
+const wchar_t* CConnectionListView::ColumnName(int logicalIndex)
+{
+    if (logicalIndex < 0 || logicalIndex >= COL_COUNT) {
+        return L"";
+    }
+    return kColumnInfo[logicalIndex].name;
+}
+
+// The byte counters need ESTATS, which needs elevation, so they stay off until
+// the user asks for them.
+bool CConnectionListView::IsColumnVisibleByDefault(int logicalIndex)
+{
+    return logicalIndex != COL_BYTES_SENT && logicalIndex != COL_BYTES_RCVD;
+}
+
 void CConnectionListView::InitColumns()
 {
     // Note: LVS_OWNERDATA style is set at creation time in MainFrm.cpp
     // This makes the ListView "virtual" - it doesn't store items,
     // it asks us for data via LVN_GETDISPINFO when it needs to paint
 
-    // Apply the Explorer visual theme for modern selection highlights and hover effects
+    // "Explorer" gives the list and its header the same visuals Explorer,
+    // TCPView and Task Manager use: soft rounded selection, hover highlight,
+    // flat gradient header, and native sort arrows. Without it comctl32 falls
+    // back to the Windows 2000 solid-blue selection block.
     ::SetWindowTheme(m_hWnd, L"Explorer", nullptr);
 
+    // No gridlines: Explorer-themed lists don't draw them, and they fight the
+    // hover highlight. FULLROWSELECT + DOUBLEBUFFER + INFOTIP is the modern set.
     SetExtendedListViewStyle(
         LVS_EX_FULLROWSELECT |
         LVS_EX_HEADERDRAGDROP |
-        LVS_EX_DOUBLEBUFFER
+        LVS_EX_DOUBLEBUFFER |
+        LVS_EX_INFOTIP |
+        LVS_EX_LABELTIP
     );
 
-    // Initialize column visibility (all visible except bytes columns)
     for (int i = 0; i < COL_COUNT; ++i) {
-        if (i == COL_BYTES_SENT || i == COL_BYTES_RCVD) {
-            columnVisible_[i] = false;
-        } else {
-            columnVisible_[i] = true;
-        }
+        columnVisible_[i] = IsColumnVisibleByDefault(i);
     }
 
-    // Insert only visible columns
-    for (int i = 0; i < COL_COUNT; ++i) {
-        if (columnVisible_[i]) {
-            InsertColumn(i, kColumnInfo[i].name, kColumnInfo[i].format, kColumnInfo[i].defaultWidth);
+    LoadLayout();
+    RebuildColumns();
+}
+
+// Rebuild the header from columnVisible_ and rebuild the visible-to-logical
+// map that OnGetDispInfo and the command handlers depend on.
+//
+// The ListView compacts subitem indices: hiding a column shifts every column
+// after it down by one. Without this map, iSubItem would be read as a logical
+// ConnectionListColumns value and every column past the hidden one would render
+// its neighbour's data.
+void CConnectionListView::RebuildColumns()
+{
+    const int dpi = netwatch::util::DpiForWindow(m_hWnd);
+
+    SetRedraw(FALSE);
+
+    while (DeleteColumn(0)) {
+        // Header_DeleteItem returns FALSE once the header is empty.
+    }
+
+    visibleToLogical_.clear();
+    for (int logical = 0; logical < COL_COUNT; ++logical) {
+        if (!columnVisible_[logical]) {
+            continue;
         }
+        // Prefer a width the user chose in an earlier session over the default.
+        int width96 = kColumnInfo[logical].defaultWidth;
+        if (savedWidths_.size() == COL_COUNT && savedWidths_[logical] > 0) {
+            width96 = savedWidths_[logical];
+        }
+
+        const int visible = static_cast<int>(visibleToLogical_.size());
+        InsertColumn(visible,
+            kColumnInfo[logical].name,
+            kColumnInfo[logical].format,
+            netwatch::util::ScaleForDpi(width96, dpi));
+        visibleToLogical_.push_back(logical);
+    }
+
+    SetRedraw(TRUE);
+    UpdateSortIndicator();
+    Invalidate();
+}
+
+// Column widths were authored at 96 DPI, so they have to be recomputed when the
+// window moves to a monitor with a different scale factor. Widths the user has
+// dragged are deliberately preserved.
+void CConnectionListView::OnDpiChanged()
+{
+    const int dpi = netwatch::util::DpiForWindow(m_hWnd);
+
+    for (size_t visible = 0; visible < visibleToLogical_.size(); ++visible) {
+        const int logical = visibleToLogical_[visible];
+        if (userSizedColumn_[logical]) {
+            continue;
+        }
+        SetColumnWidth(static_cast<int>(visible),
+            netwatch::util::ScaleForDpi(kColumnInfo[logical].defaultWidth, dpi));
+    }
+}
+
+int CConnectionListView::LogicalColumn(int visibleIndex) const
+{
+    if (visibleIndex < 0 || visibleIndex >= static_cast<int>(visibleToLogical_.size())) {
+        return -1;
+    }
+    return visibleToLogical_[visibleIndex];
+}
+
+int CConnectionListView::VisibleColumn(int logicalIndex) const
+{
+    for (size_t i = 0; i < visibleToLogical_.size(); ++i) {
+        if (visibleToLogical_[i] == logicalIndex) {
+            return static_cast<int>(i);
+        }
+    }
+    return -1;
+}
+
+// Paint the themed up/down arrow on the sorted column and clear it everywhere
+// else, so the user can see what the list is ordered by.
+void CConnectionListView::UpdateSortIndicator()
+{
+    WTL::CHeaderCtrl header = GetHeader();
+    if (header.m_hWnd == nullptr) {
+        return;
+    }
+
+    const int sortedVisible = (m_nSortColumn >= 0) ? VisibleColumn(m_nSortColumn) : -1;
+    const int count = header.GetItemCount();
+
+    for (int i = 0; i < count; ++i) {
+        HDITEM item = {};
+        item.mask = HDI_FORMAT;
+        if (!header.GetItem(i, &item)) {
+            continue;
+        }
+
+        const int wanted = (i != sortedVisible)
+            ? 0
+            : (m_bSortAscending ? HDF_SORTUP : HDF_SORTDOWN);
+
+        const int current = item.fmt & (HDF_SORTUP | HDF_SORTDOWN);
+        if (current == wanted) {
+            continue;
+        }
+
+        item.fmt = (item.fmt & ~(HDF_SORTUP | HDF_SORTDOWN)) | wanted;
+        header.SetItem(i, &item);
     }
 }
 
@@ -113,6 +315,14 @@ void CConnectionListView::RefreshConnections() {
         nullptr,
         0,
         [](void* pParam) -> unsigned int {
+            // SHGetFileInfo, used to resolve process icons, wants an
+            // initialised apartment on the calling thread.
+            const HRESULT comInit = ::CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+            struct ComScope {
+                bool owned;
+                ~ComScope() { if (owned) ::CoUninitialize(); }
+            } comScope{ SUCCEEDED(comInit) };
+
             try {
                 CConnectionListView* pThis = static_cast<CConnectionListView*>(pParam);
                 pThis->EnumerateInBackground();
@@ -154,8 +364,12 @@ void CConnectionListView::EnumerateInBackground() {
         currentShowUnconnected = showUnconnected_;
     }
 
-    auto tcpEntries = netwatch::net::TcpEnumerator::Enumerate();
-    auto udpEntries = netwatch::net::UdpEnumerator::Enumerate();
+    // The cache lives on the view but is only ever touched from this worker
+    // thread, one pass at a time, guarded by refreshInProgress_.
+    processCache_.BeginPass();
+    auto tcpEntries = netwatch::net::TcpEnumerator::Enumerate(processCache_);
+    auto udpEntries = netwatch::net::UdpEnumerator::Enumerate(processCache_);
+    processCache_.EndPass();
 
     if (shutdownRequested_) {
         refreshInProgress_ = false;
@@ -184,16 +398,11 @@ void CConnectionListView::EnumerateInBackground() {
                         return true;  // Remove: doesn't match filter
                     }
                 }
-                // Filter unconnected endpoints if setting is disabled
-                if (!currentShowUnconnected) {
-                    if (entry.state == "LISTENING") {
-                        return true;  // Remove LISTENING sockets
-                    }
-                    if (entry.protocol == "UDP" || entry.protocol == "UDPv6") {
-                        if (entry.remoteAddress == "0.0.0.0" || entry.remoteAddress.empty()) {
-                            return true;  // Remove UDP endpoints without remote
-                        }
-                    }
+                // Filter unconnected endpoints if setting is disabled. The
+                // enumerators set hasRemote, so this works for both the TCP
+                // sentinel ("0.0.0.0") and the UDP one ("*").
+                if (!currentShowUnconnected && !entry.hasRemote) {
+                    return true;
                 }
                 return false;  // Keep this entry
             }),
@@ -209,13 +418,19 @@ void CConnectionListView::EnumerateInBackground() {
         pendingEntries_ = std::move(allEntries);
     }
 
-    if (m_hWnd && !shutdownRequested_) {
-        ::PostMessage(m_hWnd, WM_REFRESH_COMPLETE, 0, 0);
+    // refreshInProgress_ is normally cleared on the UI thread once it has
+    // consumed the results. If the notification never lands, clear it here
+    // instead, otherwise the flag latches on and every later refresh
+    // early-returns forever.
+    if (m_hWnd == nullptr || shutdownRequested_ ||
+        !::PostMessage(m_hWnd, WM_REFRESH_COMPLETE, 0, 0)) {
+        refreshInProgress_ = false;
     }
 }
 
 LRESULT CConnectionListView::OnRefreshComplete(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM /*lParam*/, BOOL& /*bHandled*/)
 {
+    EnsureImageList();
     ApplyPendingEntries();
 
     int nConnections = 0;
@@ -223,6 +438,11 @@ LRESULT CConnectionListView::OnRefreshComplete(UINT /*uMsg*/, WPARAM /*wParam*/,
     int nEndpoints = 0;
 
     for (const auto& entry : entries_) {
+        // Rows lingering to show they just closed are no longer live, so they
+        // must not inflate the counters.
+        if (entry.displayState == netwatch::util::EndpointEntry::DisplayState::Closed) {
+            continue;
+        }
         if (entry.state == "ESTABLISHED") {
             nConnections++;
         } else if (entry.state == "LISTENING") {
@@ -245,59 +465,137 @@ LRESULT CConnectionListView::OnRefreshComplete(UINT /*uMsg*/, WPARAM /*wParam*/,
     return 0;
 }
 
+// True when anything the user can see about a connection has moved.
+static bool ConnectionChanged(const netwatch::util::EndpointEntry& a,
+                              const netwatch::util::EndpointEntry& b) {
+    return a.state != b.state
+        || a.stats.sentBytes != b.stats.sentBytes
+        || a.stats.rcvdBytes != b.stats.rcvdBytes;
+}
+
 void CConnectionListView::ApplyPendingEntries() {
-    // Get new entries and sort them using current sort column
     std::vector<netwatch::util::EndpointEntry> newEntries;
     {
         std::lock_guard<std::mutex> lock(pendingEntriesMutex_);
         newEntries = std::move(pendingEntries_);
     }
+
+    // Index the previous pass so each row can be classified as new, changed,
+    // unchanged or gone. Without this diff, displayState stayed Normal forever
+    // and the colour coding in OnCustomDraw could never fire.
+    std::unordered_map<std::string, size_t> previous;
+    previous.reserve(entries_.size());
+    for (size_t i = 0; i < entries_.size(); ++i) {
+        previous.emplace(MakeConnectionKey(entries_[i]), i);
+    }
+
+    std::unordered_set<std::string> currentKeys;
+    currentKeys.reserve(newEntries.size());
+
+    for (auto& entry : newEntries) {
+        std::string key = MakeConnectionKey(entry);
+        const auto it = previous.find(key);
+
+        if (it == previous.end()) {
+            entry.displayState = netwatch::util::EndpointEntry::DisplayState::New;
+        } else if (ConnectionChanged(entries_[it->second], entry)) {
+            entry.displayState = netwatch::util::EndpointEntry::DisplayState::Modified;
+        } else {
+            // A highlight lasts exactly one refresh cycle, the same way TCPView
+            // behaves. No timers needed: not re-triggering is what clears it.
+            entry.displayState = netwatch::util::EndpointEntry::DisplayState::Normal;
+        }
+
+        currentKeys.insert(std::move(key));
+    }
+
+    // Carry gone connections over for one cycle so the user can actually see
+    // what disappeared, then let them drop.
+    for (const auto& old : entries_) {
+        if (old.displayState == netwatch::util::EndpointEntry::DisplayState::Closed) {
+            continue;  // already shown as closed once
+        }
+        if (currentKeys.count(MakeConnectionKey(old)) != 0) {
+            continue;
+        }
+        auto closed = old;
+        closed.displayState = netwatch::util::EndpointEntry::DisplayState::Closed;
+        newEntries.push_back(std::move(closed));
+    }
+
     SortEntries(newEntries);
 
-    // Save the identity of the currently selected item so we can re-select it
-    // after the entries are replaced (the index alone is meaningless since rows shift)
+    // Remember which connection is selected. The index alone is meaningless
+    // because rows shift between passes.
     std::string selectedKey;
-    int nSelected = GetNextItem(-1, LVNI_SELECTED);
-    if (nSelected >= 0 && nSelected < static_cast<int>(entries_.size())) {
-        selectedKey = MakeConnectionKey(entries_[nSelected]);
+    const int previousSelection = GetNextItem(-1, LVNI_SELECTED);
+    if (previousSelection >= 0 && previousSelection < static_cast<int>(entries_.size())) {
+        selectedKey = MakeConnectionKey(entries_[previousSelection]);
     }
 
-    // Update entries
-    entries_ = std::move(newEntries);
-
-    // THIS IS THE KEY: Use ListView_SetItemCountEx with LVSICF_NOSCROLL
-    // This tells the ListView how many items we have WITHOUT changing the scroll position
-    // The ListView will call LVN_GETDISPINFO to get text when it needs to paint
-    ListView_SetItemCountEx(m_hWnd, static_cast<int>(entries_.size()), LVSICF_NOSCROLL);
-
-    // Restore selection to the same connection in the new entry list
-    if (!selectedKey.empty()) {
-        int newIndex = -1;
-        for (int i = 0; i < static_cast<int>(entries_.size()); ++i) {
-            if (MakeConnectionKey(entries_[i]) == selectedKey) {
-                newIndex = i;
+    // If the same connections come back in the same order, only the rows whose
+    // contents actually moved need repainting. That is the steady state, and it
+    // is what stops an idle window burning a full redraw every tick.
+    std::vector<int> dirtyRows;
+    bool layoutUnchanged = (newEntries.size() == entries_.size());
+    if (layoutUnchanged) {
+        for (size_t i = 0; i < newEntries.size(); ++i) {
+            if (MakeConnectionKey(newEntries[i]) != MakeConnectionKey(entries_[i])) {
+                layoutUnchanged = false;
+                dirtyRows.clear();
                 break;
             }
-        }
-
-        if (newIndex >= 0) {
-            // Deselect old index if it differs, then select the correct one
-            if (newIndex != nSelected) {
-                if (nSelected >= 0 && nSelected < static_cast<int>(entries_.size())) {
-                    SetItemState(nSelected, 0, LVIS_SELECTED | LVIS_FOCUSED);
-                }
-                SetItemState(newIndex, LVIS_SELECTED | LVIS_FOCUSED, LVIS_SELECTED | LVIS_FOCUSED);
-            }
-        } else {
-            // The previously selected connection no longer exists; clear stale selection
-            if (nSelected >= 0 && nSelected < static_cast<int>(entries_.size())) {
-                SetItemState(nSelected, 0, LVIS_SELECTED | LVIS_FOCUSED);
+            if (newEntries[i].displayState != entries_[i].displayState ||
+                ConnectionChanged(entries_[i], newEntries[i])) {
+                dirtyRows.push_back(static_cast<int>(i));
             }
         }
     }
 
-    // Invalidate to redraw with new data (but scroll position is preserved!)
-    Invalidate();
+    entries_ = std::move(newEntries);
+
+    if (layoutUnchanged) {
+        // Count is identical, so suppress the control's own full invalidate and
+        // repaint only the rows that moved.
+        ListView_SetItemCountEx(m_hWnd, static_cast<int>(entries_.size()),
+            LVSICF_NOSCROLL | LVSICF_NOINVALIDATEALL);
+        for (const int row : dirtyRows) {
+            RedrawItems(row, row);
+        }
+    } else {
+        // LVSICF_NOSCROLL keeps the scroll position where the user left it.
+        ListView_SetItemCountEx(m_hWnd, static_cast<int>(entries_.size()), LVSICF_NOSCROLL);
+    }
+
+    RestoreSelection(selectedKey, previousSelection);
+}
+
+// Re-select the connection that was selected before the refresh, wherever it
+// landed in the new ordering.
+void CConnectionListView::RestoreSelection(const std::string& selectedKey, int previousIndex) {
+    if (selectedKey.empty()) {
+        return;
+    }
+
+    int newIndex = -1;
+    for (int i = 0; i < static_cast<int>(entries_.size()); ++i) {
+        if (MakeConnectionKey(entries_[i]) == selectedKey) {
+            newIndex = i;
+            break;
+        }
+    }
+
+    if (newIndex == previousIndex) {
+        return;  // already selected at the right index
+    }
+
+    if (previousIndex >= 0 && previousIndex < static_cast<int>(entries_.size())) {
+        SetItemState(previousIndex, 0, LVIS_SELECTED | LVIS_FOCUSED);
+    }
+
+    if (newIndex >= 0) {
+        SetItemState(newIndex, LVIS_SELECTED | LVIS_FOCUSED, LVIS_SELECTED | LVIS_FOCUSED);
+    }
 }
 
 // LVN_GETDISPINFO handler - provides text for virtual ListView items on demand
@@ -306,10 +604,11 @@ LRESULT CConnectionListView::OnGetDispInfo(int /*idCtrl*/, LPNMHDR pnmh, BOOL& /
     NMLVDISPINFO* pDispInfo = reinterpret_cast<NMLVDISPINFO*>(pnmh);
     LVITEM* pItem = &pDispInfo->item;
 
-    int row = pItem->iItem;
-    int col = pItem->iSubItem;
+    const int row = pItem->iItem;
+    // iSubItem is a *visible* index. Translate before touching entry fields.
+    const int col = LogicalColumn(pItem->iSubItem);
 
-    if (row < 0 || row >= static_cast<int>(entries_.size())) {
+    if (row < 0 || row >= static_cast<int>(entries_.size()) || col < 0) {
         return 0;
     }
 
@@ -319,6 +618,129 @@ LRESULT CConnectionListView::OnGetDispInfo(int /*idCtrl*/, LPNMHDR pnmh, BOOL& /
         wcsncpy_s(pItem->pszText, pItem->cchTextMax, text.c_str(), _TRUNCATE);
     }
 
+    // Only the leftmost column carries an icon, and only when it is the process
+    // name column. The shell image list is attached lazily once the first icon
+    // has actually been resolved.
+    if ((pItem->mask & LVIF_IMAGE) != 0) {
+        pItem->iImage = (pItem->iSubItem == 0 && col == COL_PROCESS)
+            ? entries_[row].iconIndex
+            : -1;
+    }
+
+    return 0;
+}
+
+// The shell hands back its shared image list the first time an icon is
+// resolved, which happens on the worker thread. Attach it once it exists.
+void CConnectionListView::EnsureImageList()
+{
+    if (imageListAttached_) {
+        return;
+    }
+    HIMAGELIST shellList = netwatch::system::SystemSmallImageList();
+    if (shellList == nullptr) {
+        return;
+    }
+    // LVS_SHAREIMAGELISTS on the control keeps this from being destroyed with
+    // the window. It belongs to the shell.
+    ListView_SetImageList(m_hWnd, shellList, LVSIL_SMALL);
+    imageListAttached_ = true;
+}
+
+// Tab-separated text for the selected rows, restricted to the columns the user
+// currently has visible and emitted in the order they are displayed. Falls back
+// to every row when nothing is selected, which is what makes "select all, copy"
+// and "copy with no selection" both do the obvious thing.
+std::wstring CConnectionListView::BuildClipboardText() const
+{
+    if (entries_.empty() || visibleToLogical_.empty()) {
+        return std::wstring();
+    }
+
+    std::vector<int> rows;
+    for (int i = GetNextItem(-1, LVNI_SELECTED); i >= 0; i = GetNextItem(i, LVNI_SELECTED)) {
+        rows.push_back(i);
+    }
+    if (rows.empty()) {
+        rows.resize(entries_.size());
+        for (size_t i = 0; i < rows.size(); ++i) {
+            rows[i] = static_cast<int>(i);
+        }
+    }
+
+    std::wstring out;
+    out.reserve(rows.size() * 160);
+
+    for (size_t c = 0; c < visibleToLogical_.size(); ++c) {
+        if (c > 0) {
+            out += L'\t';
+        }
+        out += kColumnInfo[visibleToLogical_[c]].name;
+    }
+    out += L"\r\n";
+
+    for (const int row : rows) {
+        if (row < 0 || row >= static_cast<int>(entries_.size())) {
+            continue;
+        }
+        for (size_t c = 0; c < visibleToLogical_.size(); ++c) {
+            if (c > 0) {
+                out += L'\t';
+            }
+            out += GetCellText(row, visibleToLogical_[c]);
+        }
+        out += L"\r\n";
+    }
+
+    return out;
+}
+
+bool CConnectionListView::GetEntry(int row, netwatch::util::EndpointEntry& out) const
+{
+    if (row < 0 || row >= static_cast<int>(entries_.size())) {
+        return false;
+    }
+    out = entries_[row];
+    return true;
+}
+
+// LVN_GETINFOTIP handler - hover text for the row.
+//
+// Executable paths are routinely wider than any sensible column, and without
+// this the only way to read one is to drag the column out and back.
+LRESULT CConnectionListView::OnGetInfoTip(int /*idCtrl*/, LPNMHDR pnmh, BOOL& /*bHandled*/)
+{
+    auto* tip = reinterpret_cast<NMLVGETINFOTIP*>(pnmh);
+    if (tip->pszText == nullptr || tip->cchTextMax <= 1) {
+        return 0;
+    }
+
+    const int row = tip->iItem;
+    if (row < 0 || row >= static_cast<int>(entries_.size())) {
+        return 0;
+    }
+
+    const auto& entry = entries_[row];
+    std::wstring text = netwatch::util::StringConversion::NarrowToWide(entry.processName);
+    text += L" (PID " + std::to_wstring(entry.pid) + L")";
+
+    if (!entry.executablePath.empty()) {
+        text += L"\r\n";
+        text += netwatch::util::StringConversion::NarrowToWide(entry.executablePath);
+    }
+
+    text += L"\r\n";
+    text += netwatch::util::StringConversion::NarrowToWide(entry.protocol);
+    text += L"  ";
+    text += netwatch::util::StringConversion::NarrowToWide(entry.localAddress);
+    text += L":" + std::to_wstring(entry.localPort);
+    if (entry.hasRemote) {
+        text += L"  ->  ";
+        text += netwatch::util::StringConversion::NarrowToWide(entry.remoteAddress);
+        text += L":" + std::to_wstring(entry.remotePort);
+    }
+
+    wcsncpy_s(tip->pszText, tip->cchTextMax, text.c_str(), _TRUNCATE);
     return 0;
 }
 
@@ -364,81 +786,40 @@ std::wstring CConnectionListView::GetCellText(int row, int column) const {
 
     const auto& entry = entries_[row];
 
+    // All narrow strings in EndpointEntry are UTF-8, so widen with the same
+    // codepage they were produced with. ATL::CA2W would use the ANSI codepage
+    // and mangle any non-ASCII process name or path.
+    const auto wide = [](const std::string& s) {
+        return netwatch::util::StringConversion::NarrowToWide(s);
+    };
+
     switch (column) {
-        case COL_PROCESS:
-            return static_cast<LPCWSTR>(ATL::CA2W(entry.processName.c_str()));
-        case COL_PID:
-            return std::to_wstring(entry.pid);
-        case COL_PROTOCOL:
-            return static_cast<LPCWSTR>(ATL::CA2W(entry.protocol.c_str()));
-        case COL_INTEGRITY:
-            return static_cast<LPCWSTR>(ATL::CA2W(entry.integrityLevel.c_str()));
-        case COL_LOCAL_ADDRESS:
-            return static_cast<LPCWSTR>(ATL::CA2W(entry.localAddress.c_str()));
-        case COL_LOCAL_PORT:
-            return std::to_wstring(entry.localPort);
-        case COL_REMOTE_ADDRESS:
-            return static_cast<LPCWSTR>(ATL::CA2W(entry.remoteAddress.c_str()));
-        case COL_REMOTE_PORT:
-            return std::to_wstring(entry.remotePort);
-        case COL_STATE:
-            return static_cast<LPCWSTR>(ATL::CA2W(entry.state.c_str()));
-        case COL_ARCHITECTURE:
-            return static_cast<LPCWSTR>(ATL::CA2W(entry.architecture.c_str()));
-        case COL_DEP_STATUS:
-            return static_cast<LPCWSTR>(ATL::CA2W(entry.depStatus.c_str()));
-        case COL_ASLR_STATUS:
-            return static_cast<LPCWSTR>(ATL::CA2W(entry.aslrStatus.c_str()));
-        case COL_EXECUTABLE_PATH:
-            return static_cast<LPCWSTR>(ATL::CA2W(entry.executablePath.c_str()));
-        case COL_CFG_STATUS:
-            return static_cast<LPCWSTR>(ATL::CA2W(entry.cfgStatus.c_str()));
-        case COL_SAFESEH_STATUS:
-            return static_cast<LPCWSTR>(ATL::CA2W(entry.safeSehStatus.c_str()));
+        case COL_PROCESS:         return wide(entry.processName);
+        case COL_PID:             return std::to_wstring(entry.pid);
+        case COL_PROTOCOL:        return wide(entry.protocol);
+        case COL_INTEGRITY:       return wide(entry.integrityLevel);
+        case COL_LOCAL_ADDRESS:   return wide(entry.localAddress);
+        case COL_LOCAL_PORT:      return std::to_wstring(entry.localPort);
+        case COL_REMOTE_ADDRESS:  return wide(entry.remoteAddress);
+        // A UDP endpoint has no peer port. Printing 0 implies a measurement
+        // that was never taken.
+        case COL_REMOTE_PORT:     return entry.hasRemote ? std::to_wstring(entry.remotePort) : L"";
+        case COL_STATE:           return wide(entry.state);
+        case COL_ARCHITECTURE:    return wide(entry.architecture);
+        case COL_DEP_STATUS:      return wide(entry.depStatus);
+        case COL_ASLR_STATUS:     return wide(entry.aslrStatus);
+        case COL_EXECUTABLE_PATH: return wide(entry.executablePath);
+        case COL_CFG_STATUS:      return wide(entry.cfgStatus);
+        case COL_SAFESEH_STATUS:  return wide(entry.safeSehStatus);
+        // Blank rather than "0" when ESTATS collection is not running, so an
+        // unmeasured connection is not shown as an idle one.
         case COL_BYTES_SENT:
-            return static_cast<LPCWSTR>(ATL::CA2W(FormatNumber(entry.stats.sentBytes).c_str()));
+            return entry.statsAvailable ? wide(FormatNumber(entry.stats.sentBytes)) : L"";
         case COL_BYTES_RCVD:
-            return static_cast<LPCWSTR>(ATL::CA2W(FormatNumber(entry.stats.rcvdBytes).c_str()));
+            return entry.statsAvailable ? wide(FormatNumber(entry.stats.rcvdBytes)) : L"";
         default:
             return L"";
     }
-}
-
-bool CConnectionListView::MatchesFilter(const netwatch::util::EndpointEntry& entry) const {
-    if (processFilter_.empty()) {
-        return true;
-    }
-
-    std::string processNameLower = entry.processName;
-    std::string filterLower = processFilter_;
-
-    std::transform(processNameLower.begin(), processNameLower.end(), processNameLower.begin(), ::tolower);
-    std::transform(filterLower.begin(), filterLower.end(), filterLower.begin(), ::tolower);
-
-    return processNameLower.find(filterLower) != std::string::npos;
-}
-
-bool CConnectionListView::ShouldShowEntry(const netwatch::util::EndpointEntry& entry) const {
-    if (showUnconnected_) {
-        return true;
-    }
-
-    if (entry.state == "LISTENING") {
-        return false;
-    }
-
-    if (entry.protocol == "UDP" || entry.protocol == "UDPv6") {
-        if (entry.remoteAddress == "0.0.0.0" || entry.remoteAddress.empty()) {
-            return false;
-        }
-    }
-
-    return true;
-}
-
-void CConnectionListView::ClearAllConnections() {
-    entries_.clear();
-    ListView_SetItemCountEx(m_hWnd, 0, 0);
 }
 
 std::string CConnectionListView::FormatNumber(uint64_t value) {
@@ -587,7 +968,12 @@ LRESULT CConnectionListView::OnContextMenu(UINT /*uMsg*/, WPARAM /*wParam*/, LPA
 LRESULT CConnectionListView::OnColumnClick(int /*idCtrl*/, LPNMHDR pnmh, BOOL& /*bHandled*/)
 {
     LPNMLISTVIEW pnmv = reinterpret_cast<LPNMLISTVIEW>(pnmh);
-    int nColumn = pnmv->iSubItem;
+    // The notification carries a visible index. m_nSortColumn is kept logical so
+    // it survives a column being hidden or shown.
+    const int nColumn = LogicalColumn(pnmv->iSubItem);
+    if (nColumn < 0) {
+        return 0;
+    }
 
     // Toggle sort direction if clicking the same column
     if (m_nSortColumn == nColumn)
@@ -602,9 +988,11 @@ LRESULT CConnectionListView::OnColumnClick(int /*idCtrl*/, LPNMHDR pnmh, BOOL& /
 
     // Sort entries using the shared sort function
     SortEntries(entries_);
+    UpdateSortIndicator();
 
-    // For virtual ListView, just invalidate to redraw with new sort order
-    // LVSICF_NOSCROLL keeps the scroll position stable
+    // For virtual ListView, just tell it the count again. LVSICF_NOSCROLL keeps
+    // the scroll position stable. Every row index now holds different data, so a
+    // full repaint is correct here.
     ListView_SetItemCountEx(m_hWnd, static_cast<int>(entries_.size()), LVSICF_NOSCROLL);
     Invalidate();
 
@@ -633,37 +1021,46 @@ LRESULT CConnectionListView::OnCustomDraw(int /*idCtrl*/, LPNMHDR pnmh, BOOL& /*
     switch (pLVCD->nmcd.dwDrawStage)
     {
     case CDDS_PREPAINT:
+        // Sample the accessibility setting once per paint cycle rather than once
+        // per row, and pick up theme changes without needing a separate handler.
+        highContrast_ = QueryHighContrast();
         // Request item-specific notifications
         return CDRF_NOTIFYITEMDRAW;
 
     case CDDS_ITEMPREPAINT:
         {
-            int row = static_cast<int>(pLVCD->nmcd.dwItemSpec);
+            const int row = static_cast<int>(pLVCD->nmcd.dwItemSpec);
 
-            // Set default colors (black text on white background)
-            pLVCD->clrText = RGB(0, 0, 0);
-            pLVCD->clrTextBk = RGB(255, 255, 255);
+            // Start from the theme's own colours rather than hardcoded black on
+            // white, so the list stays readable under High Contrast and under a
+            // non-default colour scheme.
+            pLVCD->clrText = ::GetSysColor(COLOR_WINDOWTEXT);
+            pLVCD->clrTextBk = ::GetSysColor(COLOR_WINDOW);
 
-            // Get display state from entries_ for virtual ListView
-            if (row >= 0 && row < static_cast<int>(entries_.size())) {
-                auto displayState = entries_[row].displayState;
+            if (row < 0 || row >= static_cast<int>(entries_.size())) {
+                return CDRF_NEWFONT;
+            }
 
-                // Apply color coding based on display state
-                switch (displayState) {
-                case netwatch::util::EndpointEntry::DisplayState::New:
-                    pLVCD->clrText = RGB(0, 128, 0);        // Green for new
-                    break;
-                case netwatch::util::EndpointEntry::DisplayState::Closed:
-                    pLVCD->clrText = RGB(255, 0, 0);        // Red for closed
-                    break;
-                case netwatch::util::EndpointEntry::DisplayState::Modified:
-                    pLVCD->clrTextBk = RGB(255, 255, 192);  // Yellow background for modified
-                    break;
-                case netwatch::util::EndpointEntry::DisplayState::Normal:
-                default:
-                    // Keep default black on white
-                    break;
-                }
+            // Under High Contrast the user has asked for a specific, minimal
+            // palette. Tinting rows would defeat that, so leave them alone and
+            // let the state still read from the State column.
+            if (highContrast_) {
+                return CDRF_NEWFONT;
+            }
+
+            switch (entries_[row].displayState) {
+            case netwatch::util::EndpointEntry::DisplayState::New:
+                pLVCD->clrText = RGB(0, 128, 0);        // Green for new
+                break;
+            case netwatch::util::EndpointEntry::DisplayState::Closed:
+                pLVCD->clrText = RGB(192, 0, 0);        // Red for closed
+                break;
+            case netwatch::util::EndpointEntry::DisplayState::Modified:
+                pLVCD->clrTextBk = RGB(255, 255, 192);  // Yellow wash for modified
+                break;
+            case netwatch::util::EndpointEntry::DisplayState::Normal:
+            default:
+                break;
             }
 
             return CDRF_NEWFONT;
@@ -683,31 +1080,22 @@ void CConnectionListView::ShowColumn(int columnIndex, bool show) {
         return;
     }
 
-    columnVisible_[columnIndex] = show;
-
-    if (show) {
-        // Find the correct position to insert the column
-        int insertPos = 0;
-        for (int i = 0; i < columnIndex; ++i) {
+    // Refuse to hide the last remaining column: an empty header leaves the user
+    // with no way to get any column back.
+    if (!show) {
+        int remaining = 0;
+        for (int i = 0; i < COL_COUNT; ++i) {
             if (columnVisible_[i]) {
-                insertPos++;
+                ++remaining;
             }
         }
-        InsertColumn(insertPos, kColumnInfo[columnIndex].name,
-            kColumnInfo[columnIndex].format, kColumnInfo[columnIndex].defaultWidth);
-    } else {
-        // Find the current position of the column
-        int currentPos = 0;
-        for (int i = 0; i < columnIndex; ++i) {
-            if (columnVisible_[i]) {
-                currentPos++;
-            }
+        if (remaining <= 1) {
+            return;
         }
-        DeleteColumn(currentPos);
     }
 
-    // For virtual ListView, just invalidate to redraw
-    Invalidate();
+    columnVisible_[columnIndex] = show;
+    RebuildColumns();
 }
 
 bool CConnectionListView::IsColumnVisible(int columnIndex) const {
@@ -724,8 +1112,25 @@ LRESULT CConnectionListView::OnNotify(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM l
     // Get the header control
     WTL::CHeaderCtrl header = GetHeader();
 
+    if (pnmh->hwndFrom != header.m_hWnd) {
+        bHandled = FALSE;
+        return 0;
+    }
+
+    // Remember columns the user has sized by hand so a DPI change does not
+    // overwrite their width with a scaled default.
+    if (pnmh->code == HDN_ENDTRACKW || pnmh->code == HDN_ENDTRACKA) {
+        const NMHEADER* pHeader = reinterpret_cast<const NMHEADER*>(pnmh);
+        const int logical = LogicalColumn(pHeader->iItem);
+        if (logical >= 0) {
+            userSizedColumn_[logical] = true;
+        }
+        bHandled = FALSE;
+        return 0;
+    }
+
     // Check if notification is from header control and it's a right-click
-    if (pnmh->hwndFrom == header.m_hWnd && pnmh->code == NM_RCLICK) {
+    if (pnmh->code == NM_RCLICK) {
         // Get cursor position for menu
         POINT pt;
         ::GetCursorPos(&pt);
