@@ -9,9 +9,23 @@
 #define IDR_MAINFRAME                   128
 #define IDR_CONTEXT_MENU                129
 
+// Toolbar glyph strips, one per DPI bracket.
+#define IDB_TOOLBAR16                   130
+#define IDB_TOOLBAR20                   131
+#define IDB_TOOLBAR24                   132
+#define IDB_TOOLBAR32                   133
+
 // Dialogs
 #define IDD_FILTER                      101
 #define IDD_PROPERTIES                  102
+#define IDD_COLUMNS                     103
+
+// About dialog controls
+#define IDC_ABOUT_VERSION               1005
+
+// Columns dialog controls
+#define IDC_COLUMNS_LIST                1006
+#define IDC_COLUMNS_RESET               1007
 
 // List View control
 #define IDC_CONNECTION_LIST             1000
@@ -41,10 +55,12 @@
 #define ID_FILE_PAUSE                   32777
 
 #define ID_OPTIONS_ALWAYSONTOP          32780
-#define ID_OPTIONS_RESOLVEADDRESSES     32781
 #define ID_OPTIONS_SHOWUNCONNECTED      32782
-#define ID_OPTIONS_HIGHLIGHTNEW         32783
 #define ID_OPTIONS_FILTER               32784
+
+// ID_EDIT_COPY and ID_EDIT_SELECT_ALL come from atlres.h, which the standard
+// menu and accelerator handling already knows about. Do not redefine them here.
+#define ID_VIEW_COLUMNS                 32786
 
 #define ID_PROCESS_ENDPROCESS           32790
 #define ID_PROCESS_CLOSECONNECTION      32791

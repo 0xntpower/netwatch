@@ -18,12 +18,32 @@ public:
     WTL::CTrackBarCtrl m_updateFreqSlider;
     WTL::CStatic m_updateFreqLabel;
 
+    // Owned by us, unlike the shell image list the connection list borrows.
+    HIMAGELIST m_toolbarImages = nullptr;
+
+    // CFrameWindowImpl::m_hWndToolBar holds the rebar once one exists, so the
+    // real toolbar control is tracked separately.
+    HWND m_hWndToolBarCtrl = nullptr;
+
     bool m_bAlwaysOnTop = false;
     bool m_bShowUnconnected = true;
     bool m_bPaused = false;
 
     static constexpr int kDefaultUpdateIntervalMs = 2000;
     static constexpr int kStatusBarControlHeight = 18;
+    static constexpr int kSliderMin = 5;
+    static constexpr int kSliderMax = 100;
+
+    // Status bar parts, left to right. Part 0 stretches, the rest are fixed.
+    enum StatusPart {
+        kStatusPartMessage = 0,
+        kStatusPartConnections,
+        kStatusPartEndpoints,
+        kStatusPartListening,
+        kStatusPartTotal,
+        kStatusPartSlider,
+        kStatusPartCount
+    };
 
     int m_nUpdateInterval = kDefaultUpdateIntervalMs;
     std::string m_processFilter;
@@ -32,6 +52,10 @@ public:
 
     virtual BOOL PreTranslateMessage(MSG* pMsg);
     virtual BOOL OnIdle();
+
+    // Overrides CFrameWindowImpl through the CRTP pointer so the status bar
+    // children are positioned after the bars have been resized.
+    void UpdateLayout(BOOL bResizeBars = TRUE);
 
     BEGIN_UPDATE_UI_MAP(CMainFrame)
         UPDATE_ELEMENT(ID_VIEW_TOOLBAR, UPDUI_MENUPOPUP)
@@ -50,16 +74,19 @@ public:
         MESSAGE_HANDLER(WM_DESTROY, OnDestroy)
         MESSAGE_HANDLER(WM_TIMER, OnTimer)
         MESSAGE_HANDLER(WM_HSCROLL, OnHScroll)
-        MESSAGE_HANDLER(WM_SIZE, OnSize)
+        MESSAGE_HANDLER(WM_DPICHANGED, OnDpiChanged)
         MESSAGE_HANDLER(WM_REFRESH_COMPLETE, OnRefreshComplete)
         COMMAND_ID_HANDLER(ID_APP_EXIT, OnFileExit)
         COMMAND_ID_HANDLER(ID_FILE_REFRESH, OnFileRefresh)
         COMMAND_ID_HANDLER(ID_FILE_PAUSE, OnFilePause)
         COMMAND_ID_HANDLER(ID_VIEW_TOOLBAR, OnViewToolBar)
         COMMAND_ID_HANDLER(ID_VIEW_STATUS_BAR, OnViewStatusBar)
+        COMMAND_ID_HANDLER(ID_VIEW_COLUMNS, OnViewColumns)
+        COMMAND_ID_HANDLER(ID_EDIT_SELECT_ALL, OnEditSelectAll)
         COMMAND_ID_HANDLER(ID_OPTIONS_ALWAYSONTOP, OnOptionsAlwaysOnTop)
         COMMAND_ID_HANDLER(ID_OPTIONS_SHOWUNCONNECTED, OnOptionsShowUnconnected)
         COMMAND_ID_HANDLER(ID_OPTIONS_FILTER, OnOptionsFilter)
+        COMMAND_ID_HANDLER(ID_EDIT_COPY, OnEditCopy)
         COMMAND_ID_HANDLER(ID_PROCESS_ENDPROCESS, OnProcessEnd)
         COMMAND_ID_HANDLER(ID_PROCESS_CLOSECONNECTION, OnProcessCloseConnection)
         COMMAND_ID_HANDLER(ID_PROCESS_PROPERTIES, OnProcessProperties)
@@ -77,7 +104,7 @@ public:
     LRESULT OnDestroy(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
     LRESULT OnTimer(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
     LRESULT OnHScroll(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
-    LRESULT OnSize(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
+    LRESULT OnDpiChanged(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
     LRESULT OnRefreshComplete(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
     
     // File menu handlers
@@ -94,6 +121,12 @@ public:
     LRESULT OnOptionsShowUnconnected(WORD wNotifyCode, WORD wID, HWND hWndCtl, BOOL& bHandled);
     LRESULT OnOptionsFilter(WORD wNotifyCode, WORD wID, HWND hWndCtl, BOOL& bHandled);
     
+    LRESULT OnViewColumns(WORD wNotifyCode, WORD wID, HWND hWndCtl, BOOL& bHandled);
+
+    // Edit menu handlers
+    LRESULT OnEditCopy(WORD wNotifyCode, WORD wID, HWND hWndCtl, BOOL& bHandled);
+    LRESULT OnEditSelectAll(WORD wNotifyCode, WORD wID, HWND hWndCtl, BOOL& bHandled);
+
     // Process menu handlers
     LRESULT OnProcessEnd(WORD wNotifyCode, WORD wID, HWND hWndCtl, BOOL& bHandled);
     LRESULT OnProcessCloseConnection(WORD wNotifyCode, WORD wID, HWND hWndCtl, BOOL& bHandled);
@@ -109,5 +142,24 @@ public:
 
     // Helper methods
     void UpdateStatusBar();
+    void UpdateStatusMessage();
     void UpdateUIState();
+    void LayoutStatusBar();
+    void SetStatusPart(int part, LPCTSTR text);
+    void UpdateRefreshLabel();
+
+    HWND CreateToolBarCtrl();
+    HIMAGELIST LoadToolbarImages(int& sizeOut) const;
+    void ApplyToolbarImages(HWND hWndToolBar);
+
+    // Persisted user state.
+    void LoadSettings();
+    void SaveSettings();
+    void RestoreWindowPlacement();
+
+    bool GetSelectedEntry(netwatch::util::EndpointEntry& entry);
+
+    static int SliderPosToInterval(int pos);
+    static int IntervalToSliderPos(int intervalMs);
+    static bool IsRoutableRemote(const std::string& address);
 };

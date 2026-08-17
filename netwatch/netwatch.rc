@@ -59,6 +59,7 @@ BEGIN
     BUTTON      ID_PROCESS_ENDPROCESS
     BUTTON      ID_PROCESS_CLOSECONNECTION
     SEPARATOR
+    BUTTON      ID_PROCESS_PROPERTIES
     BUTTON      ID_APP_ABOUT
 END
 
@@ -68,7 +69,14 @@ END
 // Bitmap
 //
 
-IDR_MAINFRAME           BITMAP                  "res\\Toolbar.bmp"
+// Four sizes, selected at runtime from the window DPI. The previous asset was a
+// 4-bit 128x15 strip with no alpha channel, so it could never sit correctly on
+// a themed rebar.
+IDR_MAINFRAME           BITMAP                  "res\\toolbar16.bmp"
+IDB_TOOLBAR16           BITMAP                  "res\\toolbar16.bmp"
+IDB_TOOLBAR20           BITMAP                  "res\\toolbar20.bmp"
+IDB_TOOLBAR24           BITMAP                  "res\\toolbar24.bmp"
+IDB_TOOLBAR32           BITMAP                  "res\\toolbar32.bmp"
 
 /////////////////////////////////////////////////////////////////////////////
 //
@@ -84,6 +92,11 @@ BEGIN
         MENUITEM SEPARATOR
         MENUITEM "E&xit",                       ID_APP_EXIT
     END
+    POPUP "&Edit"
+    BEGIN
+        MENUITEM "&Copy	Ctrl+C",               ID_EDIT_COPY
+        MENUITEM "Select &All	Ctrl+A",         ID_EDIT_SELECT_ALL
+    END
     POPUP "&Options"
     BEGIN
         MENUITEM "&Always On Top",              ID_OPTIONS_ALWAYSONTOP
@@ -93,7 +106,7 @@ BEGIN
     END
     POPUP "&Process"
     BEGIN
-        MENUITEM "&End Process...",             ID_PROCESS_ENDPROCESS
+        MENUITEM "&End Process...	Ctrl+Del",    ID_PROCESS_ENDPROCESS
         MENUITEM "&Close Connection",           ID_PROCESS_CLOSECONNECTION
         MENUITEM SEPARATOR
         MENUITEM "P&roperties...",              ID_PROCESS_PROPERTIES
@@ -103,6 +116,8 @@ BEGIN
     BEGIN
         MENUITEM "&Toolbar",                    ID_VIEW_TOOLBAR
         MENUITEM "&Status Bar",                 ID_VIEW_STATUS_BAR
+        MENUITEM SEPARATOR
+        MENUITEM "&Columns...",                 ID_VIEW_COLUMNS
     END
     POPUP "&Help"
     BEGIN
@@ -121,7 +136,7 @@ IDR_CONTEXT_MENU MENU
 BEGIN
     POPUP ""
     BEGIN
-        MENUITEM "&End Process...",             ID_PROCESS_ENDPROCESS
+        MENUITEM "&End Process...	Ctrl+Del",    ID_PROCESS_ENDPROCESS
         MENUITEM "&Close Connection",           ID_PROCESS_CLOSECONNECTION
         MENUITEM SEPARATOR
         MENUITEM "Copy\tCtrl+C",                ID_EDIT_COPY
@@ -152,7 +167,7 @@ FONT 9, "Segoe UI"
 BEGIN
     ICON            IDR_MAINFRAME,IDC_STATIC,14,14,21,20
     LTEXT           "NetWatch",IDC_STATIC,45,14,220,14,SS_NOPREFIX
-    LTEXT           "Version 1.0.2",IDC_STATIC,45,30,220,8
+    LTEXT           "Version 1.0.2",IDC_ABOUT_VERSION,45,30,220,8
     LTEXT           "Advanced Network Connection Monitor",IDC_STATIC,45,42,220,8
     LTEXT           "Displays active TCP/UDP connections with detailed process and security context information.",IDC_STATIC,45,56,220,16
     LTEXT           "Developed by ntpower",IDC_STATIC,45,76,220,8
@@ -171,6 +186,18 @@ BEGIN
     EDITTEXT        IDC_FILTER_EDIT,7,40,236,14,ES_AUTOHSCROLL
     DEFPUSHBUTTON   "OK",IDOK,139,59,50,14
     PUSHBUTTON      "Cancel",IDCANCEL,193,59,50,14
+END
+
+IDD_COLUMNS DIALOGEX 0, 0, 210, 218
+STYLE DS_MODALFRAME | DS_CENTER | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "Choose Columns"
+FONT 9, "Segoe UI"
+BEGIN
+    LTEXT           "Select the columns to show in the connection list:",IDC_STATIC,7,7,196,8
+    CONTROL         "",IDC_COLUMNS_LIST,"SysListView32",LVS_REPORT | LVS_NOCOLUMNHEADER | LVS_SHOWSELALWAYS | WS_BORDER | WS_TABSTOP,7,20,196,170
+    PUSHBUTTON      "&Reset",IDC_COLUMNS_RESET,7,197,50,14
+    DEFPUSHBUTTON   "OK",IDOK,99,197,50,14
+    PUSHBUTTON      "Cancel",IDCANCEL,153,197,50,14
 END
 
 IDD_PROPERTIES DIALOGEX 0, 0, 380, 340
@@ -248,10 +275,11 @@ END
 IDR_MAINFRAME ACCELERATORS
 BEGIN
     VK_F5,          ID_FILE_REFRESH,        VIRTKEY
-    VK_SPACE,       ID_FILE_PAUSE,          VIRTKEY
+    VK_PAUSE,       ID_FILE_PAUSE,          VIRTKEY
     "C",            ID_EDIT_COPY,           VIRTKEY, CONTROL
     "F",            ID_OPTIONS_FILTER,      VIRTKEY, CONTROL
-    VK_DELETE,      ID_PROCESS_ENDPROCESS,  VIRTKEY
+    VK_DELETE,      ID_PROCESS_ENDPROCESS,  VIRTKEY, CONTROL
+    "A",            ID_EDIT_SELECT_ALL,     VIRTKEY, CONTROL
     VK_F1,          ID_APP_HELP_CONTENTS,   VIRTKEY
 END
 
@@ -262,8 +290,8 @@ END
 //
 
 VS_VERSION_INFO VERSIONINFO
- FILEVERSION 1,0,0,1
- PRODUCTVERSION 1,0,0,1
+ FILEVERSION 1,0,2,0
+ PRODUCTVERSION 1,0,2,0
  FILEFLAGSMASK 0x3fL
 #ifdef _DEBUG
  FILEFLAGS 0x1L
@@ -280,12 +308,12 @@ BEGIN
         BEGIN
             VALUE "CompanyName", "ntpower\0"
             VALUE "FileDescription", "NetWatch - Advanced Network Connection Monitor\0"
-            VALUE "FileVersion", "1.0.0.1\0"
+            VALUE "FileVersion", "1.0.2.0\0"
             VALUE "InternalName", "netwatch\0"
-            VALUE "LegalCopyright", "Copyright 2025 ntpower - MIT License\0"
+            VALUE "LegalCopyright", "Copyright 2026 ntpower - MIT License\0"
             VALUE "OriginalFilename", "netwatch.exe\0"
             VALUE "ProductName", "NetWatch\0"
-            VALUE "ProductVersion", "1.0.0.1\0"
+            VALUE "ProductVersion", "1.0.2.0\0"
         END
     END
     BLOCK "VarFileInfo"
@@ -319,9 +347,7 @@ END
 STRINGTABLE 
 BEGIN
     ID_OPTIONS_ALWAYSONTOP      "Keep window on top of other windows"
-    ID_OPTIONS_RESOLVEADDRESSES "Resolve IP addresses to host names"
     ID_OPTIONS_SHOWUNCONNECTED  "Show unconnected endpoints"
-    ID_OPTIONS_HIGHLIGHTNEW     "Highlight new and changed connections"
 END
 
 STRINGTABLE 

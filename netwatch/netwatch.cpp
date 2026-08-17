@@ -36,6 +36,9 @@ int Run(LPTSTR lpstrCmdLine = nullptr, int nCmdShow = SW_SHOWDEFAULT)
 		return 0;
 	}
 
+	// Restore the saved size and position before the window is first shown, so
+	// it does not visibly jump from the default rectangle to the saved one.
+	wndMain.RestoreWindowPlacement();
 	wndMain.ShowWindow(nCmdShow);
 
 	int nRet = theLoop.Run();
@@ -50,7 +53,12 @@ int WINAPI _tWinMain(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, LPTSTR lp
 		HRESULT hRes = ::CoInitialize(nullptr);
 		ATLASSERT(SUCCEEDED(hRes));
 
-		WTL::AtlInitCommonControls(ICC_COOL_CLASSES | ICC_BAR_CLASSES);	// add flags to support other controls
+		// LISTVIEW registers the list and its header, STANDARD the dialog
+		// controls the column chooser and property sheets rely on. Both were
+		// previously being registered only as a side effect of something else
+		// pulling them in.
+		WTL::AtlInitCommonControls(ICC_COOL_CLASSES | ICC_BAR_CLASSES |
+			ICC_LISTVIEW_CLASSES | ICC_STANDARD_CLASSES);
 
 		hRes = _Module.Init(nullptr, hInstance);
 		ATLASSERT(SUCCEEDED(hRes));

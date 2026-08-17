@@ -20,16 +20,15 @@ namespace {
     }
 } // anonymous namespace
 
-std::string IntegrityLevelResolver::Resolve(uint32_t pid) {
-    util::HandleGuard process(OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid));
-    if (!process.Valid()) {
-        return "AccessDenied";
+std::string IntegrityLevelResolver::Resolve(HANDLE process) {
+    if (process == nullptr || process == INVALID_HANDLE_VALUE) {
+        return "Denied";
     }
 
     util::HandleGuard token;
     HANDLE rawToken = nullptr;
-    if (!OpenProcessToken(process.Get(), TOKEN_QUERY, &rawToken)) {
-        return "AccessDenied";
+    if (!OpenProcessToken(process, TOKEN_QUERY, &rawToken)) {
+        return "Denied";
     }
     token.Reset(rawToken);
 
@@ -46,8 +45,13 @@ std::string IntegrityLevelResolver::Resolve(uint32_t pid) {
         return "Unknown";
     }
 
-    DWORD rid = *GetSidSubAuthority(til->Label.Sid,
-        static_cast<DWORD>(*GetSidSubAuthorityCount(til->Label.Sid) - 1));
+    const auto* subAuthorityCount = GetSidSubAuthorityCount(til->Label.Sid);
+    if (subAuthorityCount == nullptr || *subAuthorityCount == 0) {
+        return "Unknown";
+    }
+
+    const DWORD rid = *GetSidSubAuthority(til->Label.Sid,
+        static_cast<DWORD>(*subAuthorityCount - 1));
 
     return RidToString(rid);
 }
